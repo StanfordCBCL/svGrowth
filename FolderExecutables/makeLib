@@ -1,0 +1,1 @@
+g++ -std=c++11 -shared  vessel.o matfun.o functions.o main_function.o -o libgnr.so -lgsl -lgslcblas -lm -lboost_program_options -D_GLIBCXX_USE_CXX11_ABI=0

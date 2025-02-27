@@ -1,0 +1,28 @@
+#!/bin/bash                                                                     
+# Name of your job
+#SBATCH --job-name=svDriver
+#SBATCH --partition=amarsden
+
+# Specify the name of the output file. The %j specifies the job ID
+#SBATCH --output=svDriver.o%j
+
+# Specify the name of the error file. The %j specifies the job ID
+#SBATCH --error=svDriver.e%j
+
+# The walltime you require for your job
+#SBATCH --time=72:00:00
+
+# Job priority. Leave as normal for now
+#SBATCH --qos=normal
+
+# Number of nodes are you requesting for your job. You can have 24 processors per node
+#SBATCH --nodes=1
+
+# Amount of memory you require per node. The default is 4000 MB per node
+#SBATCH --mem=8000
+
+# Number of processors per node
+#SBATCH --ntasks-per-node=24
+
+# Name of the executable you want to run on the cluster
+python3 -u driver.py

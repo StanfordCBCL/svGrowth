@@ -1,0 +1,174 @@
+{
+   "constants": {
+      "tau_p": 7.0,
+      "tau1_infl": 7.0,
+      "tau2_infl": 28.0,
+      "tau3_infl": 42.0,
+      "fctxi": 0.3333333
+   },
+   "variables": [
+      ["x_infl", "if(t < tau1_infl, 0.5 * (1 - cos(pi * t / tau1_infl)), if(t < tau2_infl, 1.0, if(t < tau3_infl, 1 - 0.25 * (1 - cos(pi * (t - tau2_infl) / (tau3_infl - tau2_infl))), 0.5)))"],
+      ["x_p", "if(t<=tau_p, 0.5 * (1 - cos(pi * t / tau_p)), 1.0)"],
+      ["c1m", "261400 + (155700 - 261400) * x_infl^fctxi"],
+      ["c2m", "0.24 + (1.2 - 0.24) * x_infl^fctxi"],
+      ["c1c", "234900 + (27680 - 234900) * x_infl^fctxi"],
+      ["c2c", "4.08 + (9.98 - 4.08) * x_infl^fctxi"],
+      ["Gm", "1.2 + (1.23 - 1.2) * x_infl^fctxi"],
+      ["Gc", "1.25 + (1.21 - 1.25) * x_infl^fctxi"]
+      
+   ],
+
+
+   "vessel_name": "Bilayer_aorta_Latorre",
+   "in_vivo_z_stretch": 1.0,
+   "pressure": "14312.9 + (19516.3 - 14312.9) * x_p", 
+   "flow_rate": 1.0, 
+   "layers": [
+      {
+         "inner_radius_homeostatic": 0.6468,
+         "thickness_homeostatic": 0.0284, 
+         "whole_mass_density": 1050,
+         "constituents": [
+            {
+               "mass_ratio": 0.4714,
+               "constituent_model": "neohookean",
+               "c1": 89710,
+               "prestretch_r": 0.324886, 
+               "prestretch_th": 1.9, 
+               "prestretch_z": 1.62,
+               "degradation_profile": "1.0",
+               "is_active": false 
+            }, {
+               "mass_ratio": 0.4714,
+               "constituent_model": "fung",
+               "c1": "c1m",
+               "c2": "c2m",
+               "prestretch": "Gm",
+               "orientation": 90,
+               "degradation": 0.142857,
+               "stress_mediated_production": 1.6,
+               "stress_mediated_degradation": 0.0,
+               "wss_mediated_production": 2.0,
+               "wss_mediated_degradation": 0.0,
+               "inflammation_production": "1.39 * x_infl",
+               "is_active": false
+            }, {
+               "mass_ratio": 0.0038324,
+               "constituent_model": "fung",
+               "c1": "c1c",
+               "c2": "c2c",
+               "prestretch": "Gc",
+               "orientation": 0,
+               "degradation": 0.142857,
+               "stress_mediated_production": 2.0,
+               "stress_mediated_degradation": 0.0,
+               "wss_mediated_production": 2.5,
+               "wss_mediated_degradation": 0.0,
+               "inflammation_production": "1.74 * x_infl",
+               "is_active": false  
+            }, {
+               "mass_ratio": 0.0266838,
+               "constituent_model": "fung",
+               "c1": "c1c",
+               "c2": "c2c",
+               "prestretch": "Gc",
+               "orientation": 29.91,
+               "degradation": 0.142857,
+               "stress_mediated_production": 2.0,
+               "stress_mediated_degradation": 0.0,
+               "wss_mediated_production": 2.5,
+               "wss_mediated_degradation": 0.0,
+               "inflammation_production": "1.74 * x_infl",
+               "is_active": false  
+            }, {
+               "mass_ratio": 0.0266838,
+               "constituent_model": "fung",
+               "c1": "c1c",
+               "c2": "c2c",
+               "prestretch": "Gc",
+               "orientation": 330.09,
+               "degradation": 0.142857,
+               "stress_mediated_production": 2.0,
+               "stress_mediated_degradation": 0.0,
+               "wss_mediated_production": 2.5,
+               "wss_mediated_degradation": 0.0,
+               "inflammation_production": "1.74 * x_infl",
+               "is_active": false  
+            }
+
+         ]
+      }, {
+         "inner_radius_homeostatic": 0.6752,
+         "thickness_homeostatic": 0.0118, 
+         "whole_mass_density": 1050,
+         "constituents": [
+            {
+               "mass_ratio": 0.0333,
+               "constituent_model": "neohookean",
+               "c1": 89710,
+               "prestretch_r": 0.324886, 
+               "prestretch_th": 1.9, 
+               "prestretch_z": 1.62,
+               "is_active": false 
+            }, {
+               "mass_ratio": 0.0541352,
+               "constituent_model": "fung",
+               "c1": "c1c",
+               "c2": "c2c",
+               "prestretch": "Gc",
+               "orientation": 90,
+               "degradation": 0.142857,
+               "stress_mediated_production": 3.33,
+               "stress_mediated_degradation": 0.0,
+               "wss_mediated_production": 4.17,
+               "wss_mediated_degradation": 0.0,
+               "inflammation_production": "2.9 * x_infl",
+               "is_active": false  
+            }, {
+               "mass_ratio": 0.0647689,
+               "constituent_model": "fung",
+               "c1": "c1c",
+               "c2": "c2c",
+               "prestretch": "Gc",
+               "orientation": 0,
+               "degradation": 0.142857,
+               "stress_mediated_production": 3.33,
+               "stress_mediated_degradation": 0.0,
+               "wss_mediated_production": 4.17,
+               "wss_mediated_degradation": 0.0,
+               "inflammation_production": "2.9 * x_infl",
+               "is_active": false  
+            }, {
+               "mass_ratio": 0.42389795,
+               "constituent_model": "fung",
+               "c1": "c1c",
+               "c2": "c2c",
+               "prestretch": "Gc",
+               "orientation": 29.91,
+               "degradation": 0.142857,
+               "stress_mediated_production": 3.33,
+               "stress_mediated_degradation": 0.0,
+               "wss_mediated_production": 4.17,
+               "wss_mediated_degradation": 0.0,
+               "inflammation_production": "2.9 * x_infl",
+               "is_active": false  
+            }, {
+               "mass_ratio": 0.42389795,
+               "constituent_model": "fung",
+               "c1": "c1c",
+               "c2": "c2c",
+               "prestretch": "Gc",
+               "orientation": 330.09,
+               "degradation": 0.142857,
+               "stress_mediated_production": 3.33,
+               "stress_mediated_degradation": 0.0,
+               "wss_mediated_production": 4.17,
+               "wss_mediated_degradation": 0.0,
+               "inflammation_production": "2.9 * x_infl",
+               "is_active": false  
+            }
+
+         ]
+      }
+   ]
+}

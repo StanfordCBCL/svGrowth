@@ -1,0 +1,190 @@
+# General simulation parameters
+#----------------------------------------------------------------
+Continue previous simulation: 0
+Number of spatial dimensions: 3
+Number of time steps: 1000
+Time step size: 1e-2
+Number of initialization time steps: 100
+Spectral radius of infinite time step: 0.2
+Searched file name to trigger stop: STOP_SIM
+
+Save results to VTK format: 1
+Name prefix of saved VTK files: result
+Increment in saving VTK files: 100
+Start saving after time step: 1
+Save results in folder: results
+
+Increment in saving restart files: 1000
+Convert BIN to VTK format: 0
+
+Simulation requires remeshing: F
+
+Verbose: 1
+Warning: 1
+Debug: 0
+
+#----------------------------------------------------------------
+# Mesh data
+Add mesh: lumen {
+   Add face: lumen_wall {
+      Face file path: mesh/lumen-mesh-complete/mesh-surfaces/lumen_wall.vtp
+   }
+   Mesh file path: mesh/lumen-mesh-complete/mesh-complete.mesh.vtu
+   Add face: lumen_inlet {
+      Face file path: mesh/lumen-mesh-complete/mesh-surfaces/lumen_inlet.vtp
+   }
+   Add face: lumen_outlet {
+      Face file path: mesh/lumen-mesh-complete/mesh-surfaces/lumen_outlet.vtp
+   }
+   Domain: 0
+   Initial pressures file path: fluid-result/result_1000.vtu
+   Initial velocities file path: fluid-result/result_1000.vtu
+}
+
+Add mesh: wall {
+   Mesh file path: mesh/solid-mesh-complete/mesh-complete.mesh.vtu
+   Add face: wall_inlet {
+      Face file path: mesh/solid-mesh-complete/mesh-surfaces/wall_inlet.vtp
+   }
+   Add face: wall_outlet {
+      Face file path: mesh/solid-mesh-complete/mesh-surfaces/wall_outlet.vtp
+   }
+   Add face: wall_inner {
+      Face file path: mesh/solid-mesh-complete/mesh-surfaces/wall_inner.vtp
+   }
+   Add face: wall_outer {
+      Face file path: mesh/solid-mesh-complete/mesh-surfaces/wall_outer.vtp
+   }
+  Domain: 1
+  Number of variable wall properties: 98
+  Variable wall properties file path: mesh/solid-mesh-complete/mesh-complete.mesh.vtu
+}
+
+#----------------------------------------------------------------
+# Projections
+Add projection: wall_inner { 
+   Project from face: lumen_wall
+   Projection tolerance: 1e-6
+}
+
+#----------------------------------------------------------------
+# Equations
+Add equation: FSI {
+   Coupled: 1
+   Min iterations: 1
+   Max iterations: 20
+   Tolerance: 1e-4
+
+   Domain: 0 {
+      Equation: fluid
+      Density: 1.06
+      Viscosity: Constant {Value: 0.04}
+      Backflow stabilization coefficient: 0.25
+   }
+   
+   Domain: 1 { 
+      Equation: struct
+      Constitutive model: mm
+      #Elasticity modulus: 1e6
+      #Poisson ratio: 0.4
+      Dilational penalty model: M94
+      Penalty parameter: 1e7
+      Density: 0.0
+      Mass damping: 1e6
+   }
+
+   LS type: BICGS {
+      Preconditioner: Trilinos-Diagonal
+      Tolerance: 1e-4
+      Max iterations: 200
+      #Krylov space dimension: 50
+   }
+
+   Output: Spatial {
+      Displacement: t
+      Velocity: t
+      Jacobian: t
+      Stress: t
+      Strain: t
+      Cauchy_stress: t
+      Def_grad: t
+      Pressure: t
+      WSS: t
+   }
+
+   Output: Alias {
+      Displacement: FS_displacement
+   }
+   
+   Add BC: lumen_inlet {
+      Type: Dir
+      Time dependence: Steady
+      Value: -20.0
+      Impose flux: 1
+      Profile: Parabolic
+      Zero out perimeter: f
+      Effective direction: (0, 0, 1)
+      Weakly applied: t
+      Penalty parameter: 1000.0
+   }
+
+   Add BC: lumen_outlet {
+      Type: Neu
+      Time dependence: Resistance
+      Value: 307.5
+   }
+
+   Add BC: wall_inlet {
+      Type: Dir
+      Value: 0.0
+      Effective direction: (0, 0, 1)
+      Impose on state variable integral: t
+      Zero out perimeter: t
+   }
+
+   Add BC: wall_outlet {
+      Type: Dir
+      Value: 0.0
+      Effective direction: (0, 0, 1)
+      Impose on state variable integral: t
+      Zero out perimeter: f
+   }
+
+
+ 
+}
+
+Add equation: mesh {
+   Coupled: 1
+   Min iterations: 1
+   Max iterations: 5
+   Tolerance: 1e-3
+   Poisson ratio: 0.4
+
+   LS type: CG {
+      Preconditioner: FSILS
+      Tolerance: 1e-4
+   }
+  
+   Output: Spatial {
+      Displacement: t
+   }
+   
+   Add BC: lumen_inlet {
+      Type: Dir
+      Value: 0.0
+      Effective direction: (0, 0, 1)
+      Impose on state variable integral: t
+      Zero out perimeter: f
+   }
+   
+   Add BC: lumen_outlet {
+      Type: Dir
+      Value: 0.0
+      Effective direction: (0, 0, 1)
+      Impose on state variable integral: t
+      Zero out perimeter: f
+   }
+
+}
+

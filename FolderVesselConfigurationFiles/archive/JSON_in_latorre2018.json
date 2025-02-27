@@ -1,0 +1,56 @@
+{
+   "vessel_name": "Latorre2018",
+   "in_vivo_z_stretch": 1.0,
+   "pressure": 14180,
+   "flow_rate": 1.0,
+   "layers": [
+      {
+         "inner_radius_homeostatic": 1.4,
+         "thickness_homeostatic": 0.12, 
+         "whole_mass_density": 1050,
+         "constituents": [
+            {
+               "mass_ratio": 0.02,
+               "constituent_model": "neohookean",
+               "c1": 70600,
+               "prestretch_r": 0.5102, 
+               "prestretch_th": 1.4, 
+               "prestretch_z": 1.4,
+               "is_active": false 
+            }, {
+               "mass_ratio": 0.76,
+               "constituent_model": "fung",
+               "c1": 10000,
+               "c2": 3.5,
+               "prestretch": 1.30,
+               "orientation": 90,
+               "degradation": 0.0714,
+               "stress_mediated_production": 2,
+               "stress_mediated_degradation": 0.0,
+               "wss_mediated_production": 1,
+               "wss_mediated_degradation": 0.0,
+               "is_active": true,
+               "active_stress_max_homeostatic": 170000,
+               "active_remodeling_rate": 0.1429,
+               "active_stretch_min": 0.4,
+               "active_stretch_max": 1.1,
+               "active_cb": 0.8326,
+               "active_cs": 0.4163
+            }, {
+               "mass_ratio": 0.22,
+               "constituent_model": "fung",
+               "c1": 672500,
+               "c2": 22,
+               "prestretch": 1.08,
+               "orientation": 90,
+               "degradation": 0.01,
+               "stress_mediated_production": 1,
+               "stress_mediated_degradation": 0.0,
+               "wss_mediated_production": 0.5,
+               "wss_mediated_degradation": 0.0,
+               "is_active": false
+            }
+         ]
+      }
+   ]
+}

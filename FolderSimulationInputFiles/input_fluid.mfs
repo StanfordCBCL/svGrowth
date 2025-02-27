@@ -1,0 +1,99 @@
+# General simulation parameters
+#----------------------------------------------------------------
+Continue previous simulation: 0
+Number of spatial dimensions: 3
+Number of time steps: 1000
+Time step size: 1e-2
+Spectral radius of infinite time step: 0.2
+Searched file name to trigger stop: STOP_SIM
+
+Save results to VTK format: 1
+Name prefix of saved VTK files: result
+Increment in saving VTK files: 100
+Start saving after time step: 1
+Save results in folder: fluid-result
+
+Increment in saving restart files: 1000
+Convert BIN to VTK format: 0
+
+Simulation requires remeshing: F
+
+Verbose: 1
+Warning: 1
+Debug: 0
+
+#----------------------------------------------------------------
+# Mesh data
+Add mesh: lumen {
+   Mesh file path: mesh/lumen-mesh-complete/mesh-complete.mesh.vtu
+   Add face: lumen_wall {
+      Face file path: mesh/lumen-mesh-complete/mesh-surfaces/lumen_wall.vtp
+   }
+   Add face: lumen_outlet {
+      Face file path: mesh/lumen-mesh-complete/mesh-surfaces/lumen_outlet.vtp
+   }
+
+   Add face: lumen_inlet {
+      Face file path: mesh/lumen-mesh-complete/mesh-surfaces/lumen_inlet.vtp
+   }
+
+}
+
+# Equations
+Add equation: fluid {
+   Coupled: 1
+   Min iterations: 1
+   Max iterations: 30
+   Tolerance: 1e-7
+
+   Density: 1.06
+   Viscosity: Constant {Value: 0.04}
+   Backflow stabilization coefficient: 0.25
+
+
+   LS type: NS
+   {
+      Max iterations:      10
+      NS-GM max iterations: 3
+      NS-CG max iterations: 500
+      Tolerance:           1D-3
+      NS-GM tolerance:     1D-3
+      NS-CG tolerance:     1D-3
+      Krylov space dimension: 50
+   }
+
+   Output: Spatial {
+      Velocity: t
+      Pressure: t
+      Traction: f
+      WSS: t
+   }
+   
+   #Add BC: lumen_inlet {
+   #   Type: Neu
+   #   Time dependence: Steady
+   #   Value: 6150
+   #}
+
+   Add BC: lumen_inlet {
+      Type: Dir
+      Time dependence: Steady
+      Value: -20.0
+      Impose flux: 1
+      Profile: Parabolic
+   }
+
+   
+
+   Add BC: lumen_outlet {
+      Type: Neu
+      Time dependence: Resistance
+      Value: 307.5
+   }
+
+
+   Add BC: lumen_wall {
+      Type: Dir
+      Value: 0.0
+   }
+}

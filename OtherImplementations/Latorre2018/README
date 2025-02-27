@@ -1,0 +1,15 @@
+Can run from windows using WSL:
+https://learn.microsoft.com/en-us/windows/wsl/install
+
+Install dependencies from WSL command line:
+sudo apt-get install build-essential
+sudo apt-get install libgsl-dev
+
+To compile on command line:
+g++ main.cpp -lgsl -lgslcblas -lm -o gnr
+
+To run generated executable:
+./gnr
+
+To visualize:
+Run Plotting.m in Matlab, reproduces Figure 1 from Latorre and Humphrey 2018, ZAMM

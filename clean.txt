@@ -1,0 +1,13 @@
+rm -rf *_out_python_*
+rm -rf mesh*
+rm -rf result*
+rm -rf outputPoints*
+rm -rf solidMesh_*
+rm -rf solidMeshIter_*
+rm -rf wall_inner_*
+rm -rf *~*
+rm -rf svDriver*
+rm -rf fluid-result
+rm -rf Outputs
+rm -rf grDriver.dat
+cp reset.dat numstart.dat

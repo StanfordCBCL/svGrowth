@@ -1,0 +1,80 @@
+{
+   "vessel_name": "Scaffolded_murine_aorta_abhay",
+   "in_vivo_z_stretch": 1.0,
+   "pressure": 670,
+   "flow_rate": 1.0,
+   "layers": [
+      {
+         "inner_radius_homeostatic": 0.2,
+         "thickness_homeostatic": 0.0074, 
+         "whole_mass_density": 1050,
+         "constituents": [
+            {
+               "mass_ratio": 0.1,
+               "constituent_model": "neohookean",
+               "c1": 1000,
+               "prestretch_r": 1.75, 
+               "prestretch_th": 1.75, 
+               "prestretch_z": 1.75,
+               "is_active": false 
+            }, {
+               "mass_ratio": 0.48,
+               "constituent_model": "fung",
+               "c1": 1000,
+               "c2": 0.05,
+               "prestretch": 1.31,
+               "orientation": 90,
+               "degradation": 0.9009,
+               "stress_mediated_production": 2.009,
+               "stress_mediated_degradation": 0.0,
+               "wss_mediated_production": 6.007,
+               "wss_mediated_degradation": 0.0,
+               "inflammation_production": "0.8 * x_infl",
+               "is_active": false
+            }, {
+               "mass_ratio": 0.42,
+               "constituent_model": "fung",
+               "c1": 24022,
+               "c2": 0.1,
+               "prestretch": 1.039,
+               "orientation": 0,
+               "degradation": 0.01,
+               "stress_mediated_production": 0.01,
+               "stress_mediated_degradation": 0.0,
+               "wss_mediated_production": 8.006,
+               "wss_mediated_degradation": 0.0,
+               "inflammation_production": "x_infl",
+               "is_active": false
+            }, {
+               "mass_ratio": 0.42,
+               "constituent_model": "fung",
+               "c1": 71,
+               "c2": 1.035,
+               "prestretch": 1.039,
+               "orientation": 36.60,
+               "degradation": 0.01,
+               "stress_mediated_production": 0.01,
+               "stress_mediated_degradation": 0.0,
+               "wss_mediated_production": 8.006,
+               "wss_mediated_degradation": 0.0,
+               "inflammation_production": "x_infl",
+               "is_active": false
+            }, {
+               "mass_ratio": 0.42,
+               "constituent_model": "fung",
+               "c1": 71,
+               "c2": 1.035,
+               "prestretch": 1.039,
+               "orientation": 323.4,
+               "degradation": 0.01,
+               "stress_mediated_production": 0.01,
+               "stress_mediated_degradation": 0.0,
+               "wss_mediated_production": 8.006,
+               "wss_mediated_degradation": 0.0,
+               "inflammation_production": "x_infl",
+               "is_active": false
+            }
+         ]
+      }
+   ]
+}
