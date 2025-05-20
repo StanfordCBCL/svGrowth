@@ -41,7 +41,7 @@ def update_time_step_py(curr_vessel):
     while True:
         iter_ += 1
 
-        # (a) Store the old total referential mass
+        # (a) Store the old total referential mass density
         rhoR_s0 = curr_vessel.rhoR[sn]
 
         # (b) Update the kinetic variables again
@@ -50,10 +50,10 @@ def update_time_step_py(curr_vessel):
         # (c) Re-solve for in vivo geometry
         find_iv_geom(curr_vessel)
 
-        # (d) Compute new total referential mass
+        # (d) Compute new total referential mass density
         rhoR_s1 = curr_vessel.rhoR[sn]
 
-        # (e) Check relative convergence in total mass
+        # (e) Check relative convergence in total mass density
         mass_check = abs((rhoR_s1 - rhoR_s0) / rhoR_s0 if rhoR_s0 != 0 else 0)
 
         if (mass_check <= tol) or (iter_ >= max_iter):

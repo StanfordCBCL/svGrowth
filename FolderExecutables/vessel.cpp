@@ -108,6 +108,12 @@ void vessel::evaluate_expr(json& expression_in, vector<double>& result, double d
 }
 
 void vessel::printNativeOutputs() {
+    // Outputs:
+    // time 
+    // for each layer:
+    // s, a, h, rhoR, rho 
+    //      for each constituent: rhoR_alpha 
+    // sigma (3 directions), sigma_inv, bar_tauw, bar_tauw_h, P, P_h, f, f_h, Q, Q_h
     GnR_out << s << "\t";
     for (int l = 0; l < layers.size(); l ++) {
         GnR_out << layers[l].a[sn] << "\t" << layers[l].h[sn] << "\t" << layers[l].rhoR[sn] << "\t" << layers[l].rho[sn] << "\t";

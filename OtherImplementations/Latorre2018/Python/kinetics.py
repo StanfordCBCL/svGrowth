@@ -57,14 +57,14 @@ def update_kinetics(curr_vessel):
 
             # Update stimulus functions
             upsilon_mech_p = 1.0 + K_sigma_p * delta_sigma - K_tauw_p * delta_tauw
-            upsilon_mech_d = 1.0 + K_sigma_d * (delta_sigma ** 2) + K_tauw_d * (delta_tauw ** 2)
+            upsilon_mech_d = 1.0 + K_sigma_d * (delta_sigma ** 2) + K_tauw_d * (delta_tauw ** 2) 
 
             k_alpha_s = 0
             mR_alpha_s = 0
             rhoR_alpha_s = 0
 
             # Current degradation rate and mass-production rate for alpha
-            k_alpha_s = curr_vessel.k_alpha_h[alpha] * upsilon_mech_d
+            k_alpha_s = curr_vessel.k_alpha_h[alpha] * upsilon_mech_d # TODO: looks inconsistent with Latorre 2018, eq.42
             mR_alpha_s = (k_alpha_s *
                           upsilon_mech_p *
                           curr_vessel.rhoR_alpha[nts * alpha + sn])

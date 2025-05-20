@@ -42,7 +42,6 @@ def main():
     curr_vessel.a_mid  = [0.0] * curr_vessel.nts  # loaded mid-radius over time
     curr_vessel.h      = [0.0] * curr_vessel.nts  # loaded wall thickness over time
 
-
     # Set initial loaded geometry to the in-vivo reference
     curr_vessel.a[0]     = curr_vessel.a_h
     curr_vessel.a_mid[0] = curr_vessel.a_mid_h

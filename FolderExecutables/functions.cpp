@@ -778,7 +778,6 @@ int find_iv_geom(void* vessel_in) {
         a_mid_high = gsl_root_fsolver_x_upper(s);
         status = gsl_root_test_interval(a_mid_low, a_mid_high, 0, pow(10, -12));
 
-
         //if (status == GSL_SUCCESS) {
         //    printf("Loaded Config Converged:\n");
         //    printf("%5d [%.7f, %.7f] %.7f %.7fs\n", iter, a_mid_low, a_mid_high, a_mid_act, a_mid_high - a_mid_low);

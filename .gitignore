@@ -1,2 +1,6 @@
-
+RawOutputs/
 .DS_Store
+.vscode/settings.json
+*.o
+OtherImplementations/Valentin2009/results/
+__pycache__
