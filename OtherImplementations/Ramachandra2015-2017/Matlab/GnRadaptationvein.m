@@ -26,12 +26,13 @@
 % for class purposes only
 
 function [rad,thick]=GnRadaptationvein(percent_pressure,percent_flow,filename)
-comp_t=1500;
+comp_t=1000;
 delta_P=1+percent_pressure; % convert percentage to fold increase
 delta_Q=1+percent_flow; % convert percentage to fold increase
 
 % Additional flags
 is_collagen_angle_const = false;
+loading = "gradual"; % 'step' or 'gradual'
 
 K_c1=0.010000; % rate parameter - collagen, intramural
 K_c2=8.006000; % rate parameter - collagen, shear
@@ -281,14 +282,31 @@ for n_t = 2:num_t
     %initial guess (predictors)
     beta = 0.3;  %an adjusting parameter for a Newton-Rapson method
     
-    if t > 2
-        P   = P_h*delta_P;
-        Q_M = Q_Mh*delta_Q;
-    else
-        P   = P_h;
-        Q_M = Q_Mh;
+    if loading == "step"
+        if t > 2
+            P   = P_h*delta_P;
+            Q_M = Q_Mh*delta_Q;
+        else
+            P   = P_h;
+            Q_M = Q_Mh;
+        end
+    elseif loading == "gradual"
+        if t <= 2
+            P   = P_h;
+            Q_M = Q_Mh;
+        elseif t > 2 && t < 32
+            p_slope = (P_h*delta_P -P_h) / (32 - 2); 
+            % Define the linear gradual loading equation
+            p = @(t) P_h + p_slope * (t - 2);
+           
+            P   = p(t);
+            Q_M = Q_Mh*delta_Q;
+        else
+            P   = P_h*delta_P;
+            Q_M = Q_Mh*delta_Q;
+        end
     end
-    
+
 
     if n_t > 3
         if (abs(Da(n_t - 1) - Da(n_t - 2))/Da(n_t - 1) < 0.1)

@@ -1,6 +1,6 @@
 clc; clear all; clf;
 
-data = load('GnR_out.txt');
+data = load('GnR_out_ZAMM.txt');
 time = -140:1:560;
 a = data(1:end - 1,1);
 h = data(1:end - 1,2);
