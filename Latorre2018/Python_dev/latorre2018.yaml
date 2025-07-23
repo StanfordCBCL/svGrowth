@@ -1,0 +1,56 @@
+vessel:
+  vessel_name: "Cerebral"
+  n_days: 701.0
+  dt: 1.0
+  a_h: 1.40
+  h_h: 0.12
+  lambda_z_h: 1.0
+  rhoR_h: 1050.0 # in kg/m^3
+
+constituents:
+  elastin:
+    c1_material_constant: 70.6  # in kPa
+    c2_material_constant: 0.0
+    orientation_angle: -1.0  # isotropic marker
+    deposition_stretch: 1.40
+    mass_fraction: 0.02
+    degradation_rate: 0.0  # 1/day
+    stress_production_gain: 0.0
+    stress_degradation_gain: 0.0
+    wss_production_gain: 0.0
+    wss_degradation_gain: 0.0
+
+  muscle:
+    c1_material_constant: 10.0  # in kPa
+    c2_material_constant: 3.5
+    orientation_angle: 90.0  # in degrees
+    deposition_stretch: 1.30
+    mass_fraction: 0.76
+    degradation_rate: 0.07142857142857142  # 1/day
+    stress_production_gain: 2.0
+    stress_degradation_gain: 1.0
+    wss_production_gain: 1.0
+    wss_degradation_gain: 0.0
+
+  collagen:
+    c1_material_constant: 672.5  # in kPa
+    c2_material_constant: 22.0
+    orientation_angle: 90.0  # in degrees
+    deposition_stretch: 1.08
+    mass_fraction: 0.22
+    degradation_rate: 0.1  # 1/day
+    stress_production_gain: 1.0
+    stress_degradation_gain: 1.0
+    wss_production_gain: 0.5
+    wss_degradation_gain: 0.0
+
+loading_variables:
+  P_h: 14.18
+  Q_h: 1.0 # m^3/day or dimensionless
+
+active_stress_parameters:
+  T_act_h: 170.0
+  k_act: 0.14285714285714285
+  lambda_0: 0.4
+  lambda_m: 1.1
+  CB: 0.8326

@@ -4,3 +4,7 @@ RawOutputs/
 *.o
 OtherImplementations/Valentin2009/results/
 __pycache__
+/Ramachandra2015-2017/Matlab/postproc
+/Ramachandra2015-2017/Matlab/results
+Ramachandra2015-2017/Matlab/command_lines.txt
+Ramachandra2015-2017/Matlab/test.m
