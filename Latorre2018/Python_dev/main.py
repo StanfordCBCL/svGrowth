@@ -139,18 +139,25 @@ def main():
     curr_vessel.Cbar     = [0.0, 0.0, 0.0]  # a stiffness-like measure for each direction
 
     # Active stress parameters
-    curr_vessel.alpha_active = [0, 1, 0]  # elastin=0, muscle=1, collagen=0
+    curr_vessel.alpha_active = [0] * curr_vessel.n_alpha  # 0=inactive, 1=active for each constituent
     curr_vessel.a_act = [0.0]*curr_vessel.nts
     curr_vessel.a_act[0] = curr_vessel.a_h  # reference radius for active muscle tone
 
-    curr_vessel.T_act_h =  params['active_stress_parameters']['T_act_h'] * kPa_to_Pa  # homeostatic max active stress
-    curr_vessel.T_act   = curr_vessel.T_act_h  # current active stress
-    curr_vessel.k_act   = params['active_stress_parameters']['k_act']       # active remodeling rate (1/day)
-    curr_vessel.lambda_0 = params['active_stress_parameters']['lambda_0']   # minimum contractile stretch
-    curr_vessel.lambda_m = params['active_stress_parameters']['lambda_m']   # maximum contractile stretch
-    curr_vessel.CB       = params['active_stress_parameters']['CB']         # basal tone coefficient
-    curr_vessel.CS       = curr_vessel.CB / 2.0  # shear-sensitivity coefficient
-
+    # Check each constituent for active stress parameters
+    for alpha, properties in enumerate(params['constituents'].values()):
+        is_active = properties.get('is_active', False)
+        curr_vessel.alpha_active[alpha] = 1 if is_active else 0
+        
+        # If active, load the active stress parameters
+        if is_active:
+            curr_vessel.T_act_h = properties['T_act_h'] * kPa_to_Pa  # homeostatic max active stress
+            curr_vessel.T_act   = curr_vessel.T_act_h  # current active stress
+            curr_vessel.k_act   = properties['k_act']       # active remodeling rate (1/day)
+            curr_vessel.lambda_0 = properties['lambda_0']   # minimum contractile stretch
+            curr_vessel.lambda_m = properties['lambda_m']   # maximum contractile stretch
+            curr_vessel.CB       = properties['CB']         # basal tone coefficient
+            curr_vessel.CS       = curr_vessel.CB / 2.0     # shear-sensitivity coefficient
+    
     # ------------------------------------------------------------------
     # 6) Initialize each constituent
     # ------------------------------------------------------------------

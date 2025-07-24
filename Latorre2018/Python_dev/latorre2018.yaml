@@ -31,6 +31,12 @@ constituents:
     stress_degradation_gain: 1.0
     wss_production_gain: 1.0
     wss_degradation_gain: 0.0
+    is_active: True
+    T_act_h: 170.0  # homeostatic max active stress (kPa)
+    k_act: 0.14285714285714285  # active remodeling rate (1/day)
+    lambda_0: 0.4  # minimum contractile stretch
+    lambda_m: 1.1  # maximum contractile stretch
+    CB: 0.8326  # basal tone coefficient
 
   collagen:
     c1_material_constant: 672.5  # in kPa
@@ -47,10 +53,3 @@ constituents:
 loading_variables:
   P_h: 14.18
   Q_h: 1.0 # m^3/day or dimensionless
-
-active_stress_parameters:
-  T_act_h: 170.0
-  k_act: 0.14285714285714285
-  lambda_0: 0.4
-  lambda_m: 1.1
-  CB: 0.8326
