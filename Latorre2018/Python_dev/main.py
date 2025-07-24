@@ -5,6 +5,7 @@ from vessel import Vessel
 from geometry import find_iv_geom, find_equil_geom
 from stress import update_sigma
 from timestep import update_time_step_py
+from kinetics import apply_perturbation
 
 
 def main():
@@ -235,16 +236,14 @@ def main():
     # ------------------------------------------------------------------
     # 9) Run the G&R time stepping
     # ------------------------------------------------------------------
-    perturb_offset = 140.0
     for sn in range(1, curr_vessel.nts):
         curr_vessel.s = curr_vessel.dt * sn
 
+        # TODO: pre-calculate all pressure/flow loading values 
         # Mechanical perturbation after 'perturb_offset' days
-        if curr_vessel.s > perturb_offset:
-            factor = (1.0 - math.exp(-(curr_vessel.s - perturb_offset)/10.0))
-            curr_vessel.P = curr_vessel.P_h * (1.0 + 0.5 * factor)
-            curr_vessel.lambda_z_curr = curr_vessel.lambda_z_h * (1.0 + 0.5 * factor)
-            curr_vessel.Q = curr_vessel.Q_h * (1.0 + 0.5 * factor)
+        curr_vessel.P = apply_perturbation(curr_vessel.s, 140.0, curr_vessel.P_h, perturbation_type="latorre2018")
+        curr_vessel.Q = apply_perturbation(curr_vessel.s, 140.0, curr_vessel.Q_h, perturbation_type="latorre2018")
+        curr_vessel.lambda_z_curr = apply_perturbation(curr_vessel.s, 140.0, curr_vessel.lambda_z_h, perturbation_type="latorre2018")
 
         # Update vessel index and solve
         curr_vessel.sn = sn
