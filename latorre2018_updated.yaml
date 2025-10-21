@@ -1,0 +1,117 @@
+simulation:
+  simulation_name: "latorre2018_updated"
+  output_directory: "output/latorre2018_updated"
+  n_days: 701.0
+  dt: 1.0
+  tolerance: 1e-6
+  max_iterations: 50
+  verbose: True
+  loading_variables:
+    P_h: 14.18
+    Q_h: 1.0 # m^3/day or dimensionless
+
+layer:
+  layer_name: "Cerebral artery"
+  a_h: 1.40
+  h_h: 0.12
+  lambda_z_h: 1.0
+  rhoR_h: 1050.0 # in kg/m^3
+
+  constituents:
+    elastin:
+      # Single constituent - same as before
+      constitutive_model:
+        type: "neo_hookean"
+        isotropy: "isotropic"
+        parameters:
+          c: 70.6  # kPa
+      
+      mass_fraction: 0.02
+      deposition_stretch: 1.40
+      degradation_rate: 0.0
+      stress_production_gain: 0.0
+      stress_degradation_gain: 0.0
+      wss_production_gain: 0.0
+      wss_degradation_gain: 0.0
+
+    muscle:
+      # Single constituent with active properties
+      constitutive_model:
+        type: "fung_exponential"
+        isotropy: "anisotropic"
+        fiber_orientation: 90.0  # degrees
+        parameters:
+          c1: 10.0  # kPa
+          c2: 3.5   # dimensionless
+      
+      active_properties:
+        T_act_h: 170.0  # kPa
+        k_act: 0.14285714285714285
+        lambda_0: 0.4
+        lambda_m: 1.1
+        CB: 0.8326
+      
+      mass_fraction: 0.76
+      deposition_stretch: 1.30
+      degradation_rate: 0.07142857142857142
+      stress_production_gain: 2.0
+      stress_degradation_gain: 1.0
+      wss_production_gain: 1.0
+      wss_degradation_gain: 0.0
+
+    collagen:
+      # Multi-family constituent
+      constituent_type: "multi_fiber_family"
+      
+      # Shared kinetic properties for all collagen fiber families
+      shared_properties:
+        total_mass_fraction: 0.22  # Total collagen mass fraction
+        deposition_stretch: 1.08   # Same for all families
+        degradation_rate: 0.1      # Same for all families
+        stress_production_gain: 1.0
+        stress_degradation_gain: 1.0
+        wss_production_gain: 0.5
+        wss_degradation_gain: 0.0
+      
+      # Individual fiber families with their own mechanical properties
+      fiber_families:
+        circumferential:
+          mass_fraction_ratio: 0.6  # 60% of total collagen mass
+          constitutive_model:
+            type: "fung_exponential"
+            isotropy: "anisotropic"
+            fiber_orientation: 90.0  # degrees (circumferential)
+            parameters:
+              c1: 672.5  # kPa
+              c2: 22.0   # dimensionless
+        
+        axial:
+          mass_fraction_ratio: 0.4  # 40% of total collagen mass
+          constitutive_model:
+            type: "fung_exponential"
+            isotropy: "anisotropic"
+            fiber_orientation: 0.0   # degrees (axial)
+            parameters:
+              c1: 500.0  # kPa (different from circumferential)
+              c2: 18.0   # dimensionless
+        
+        # Optional: Additional fiber families
+        # diagonal_1:
+        #   mass_fraction_ratio: 0.25  # 25% of total collagen
+        #   constitutive_model:
+        #     type: "fung_exponential"
+        #     isotropy: "anisotropic"
+        #     fiber_orientation: 45.0   # degrees
+        #     parameters:
+        #       c1: 400.0
+        #       c2: 15.0
+        # 
+        # diagonal_2:
+        #   mass_fraction_ratio: 0.25  # 25% of total collagen
+        #   constitutive_model:
+        #     type: "fung_exponential"
+        #     isotropy: "anisotropic"
+        #     fiber_orientation: -45.0  # degrees
+        #     parameters:
+        #       c1: 400.0
+        #       c2: 15.0
