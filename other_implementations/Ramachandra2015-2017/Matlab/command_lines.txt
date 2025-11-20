@@ -1,0 +1,17 @@
+GnRadaptationvein(0.5,0.1,"/Users/lpapamanolis/workspace/github/svGrowth/Ramachandra2015-2017/Matlab/results/fig3_reproduction_update1_test.dat")
+
+GnRadaptationvein(0,0,"/Users/lpapamanolis/workspace/github/svGrowth/Ramachandra2015-2017/Matlab/results/fig3_homeostatic_midpoint_test.dat")
+
+GnRadaptationvein_mid_point(0,0,"/Users/lpapamanolis/workspace/github/svGrowth/Ramachandra2015-2017/Matlab/results/fig3_homeostatic_midpoint_test.dat")
+
+
+GnRadaptationvein(4,0.5,"/Users/lpapamanolis/workspace/github/svGrowth/RawOutputs/Matlab_abhay2017/x5_test_gradual.dat")
+GnRadaptationvein(9,1,"/Users/lpapamanolis/workspace/github/svGrowth/RawOutputs/Matlab_abhay2017/x10_gradual.dat")
+GnRadaptationvein(14,2,"/Users/lpapamanolis/workspace/github/svGrowth/RawOutputs/Matlab_abhay2017/x15_gradual.dat")
+GnRadaptationvein(18,3,"/Users/lpapamanolis/workspace/github/svGrowth/RawOutputs/Matlab_abhay2017/x19_gradual.dat")
+
+GnRadaptationvein(4,0.5,"/Users/lpapamanolis/workspace/github/svGrowth/RawOutputs/Matlab_abhay2017/x5_test_gradual_1month.dat")
+GnRadaptationvein(9,1,"/Users/lpapamanolis/workspace/github/svGrowth/RawOutputs/Matlab_abhay2017/x10_gradual_1month.dat")
+GnRadaptationvein(14,2,"/Users/lpapamanolis/workspace/github/svGrowth/RawOutputs/Matlab_abhay2017/x15_gradual_1month.dat")
+GnRadaptationvein(18,3,"/Users/lpapamanolis/workspace/github/svGrowth/RawOutputs/Matlab_abhay2017/x19_gradual_1month.dat")
+
