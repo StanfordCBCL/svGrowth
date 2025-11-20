@@ -1,10 +1,10 @@
-# pyGrowth
+# svGrowth
 
 A constrained mixture model framework for simulating growth and remodeling (G&R) in biological tissues, with a focus on arterial and venous wall mechanics.
 
 ## Overview
 
-**pyGrowth** implements a computational framework for modeling the evolution of soft biological tissues under mechanical stimuli. The code is based on the constrained mixture theory, where tissues are composed of multiple constituents (e.g., elastin, collagen, smooth muscle) that turnover at different rates and adapt to mechanical loading.
+**svGrowth** implements a computational framework for modeling the evolution of soft biological tissues under mechanical stimuli. The code is based on the constrained mixture theory, where tissues are composed of multiple constituents (e.g., elastin, collagen, smooth muscle) that turnover at different rates and adapt to mechanical loading.
 
 ### Key Features
 
@@ -19,8 +19,8 @@ A constrained mixture model framework for simulating growth and remodeling (G&R)
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/pyGrowth.git
-cd pyGrowth
+git clone https://github.com/yourusername/svGrowth.git
+cd svGrowth
 
 # Install dependencies
 pip install -r requirements.txt
@@ -47,7 +47,7 @@ This will:
 ## Project Structure
 
 ```
-pyGrowth/
+svGrowth/
 ├── main.py                      # Entry point
 ├── simulation.py                # Main simulation loop
 ├── configuration.py             # Multi-layer vessel configuration
@@ -223,12 +223,12 @@ MIT License - see LICENSE file
 
 ## Citation
 
-If you use pyGrowth in your research, please cite:
+If you use svGrowth in your research, please cite:
 
 ```bibtex
 @software{TBD,
   author = {Your Name},
-  title = {pyGrowth: A Python Framework for Growth and Remodeling},
+  title = {svGrowth: A Python Framework for Growth and Remodeling},
   year = {TBD},
 }
 ```
