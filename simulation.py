@@ -12,6 +12,8 @@ class Simulation:
                  n_steps=100, 
                  tolerance=1e-6, 
                  max_iterations=50, 
+                 integration_method='simpson',
+                 survival_function_computation='backward',  
                  verbose=False):
         
         self.configuration = configuration
@@ -19,6 +21,8 @@ class Simulation:
         self.n_steps = n_steps
         self.tolerance = tolerance
         self.max_iterations = max_iterations
+        self.integration_method = integration_method
+        self.survival_function_computation = survival_function_computation
         self.verbose = verbose
         
         self.current_timestep = 0  # Current timestep index (0 = initial/homeostatic state)
@@ -34,38 +38,58 @@ class Simulation:
         self.output_file = None
 
     def run(self):
-        """Run the complete G&R simulation with output."""
-        # Setup output at start of simulation
-        self._setup_output()
-        
-        try:
-            # Run simulation steps
-            for step in range(self.n_steps):
-                print(f"\n--- Simulation step {step+1} (timestep {self.current_timestep} → {self.current_timestep+1}) ---")
+        """Run the complete G&R simulation."""        
+        for step in range(self.n_steps):
+            print(f"\n--- Simulation step {step+1} (timestep {self.current_timestep} → {self.current_timestep+1}) ---")
 
-                self._advance_one_timestep()
-                
-                # Write step data
-                self._write_step_data(step)
-                
-        finally:
-            # Always clean up, even if simulation fails
-            self._cleanup_output()
+            self._initialize_timestep()
+            while self._convergence_not_reached:
+                self.configuration.compute_all_rhoR_alpha(
+                    next_timestep, 
+                    self.dt, 
+                    self.integration_method,
+                    self.survival_function_computation
+                )
+                self.configuration.compute_all_stress(next_timestep, self.dt, self.integration_method)
+                self.configuration.compute_radius(next_timestep)
+                self._check_convergence(self.configuration.get_rhoR)             
 
-    def _advance_one_timestep(self):
-        """Advance entire system by one timestep."""
+
+    def _initialize_timestep(self):
         next_timestep = self.current_timestep + 1
         print(f"Advancing from timestep {self.current_timestep} to {next_timestep}")
         
-        # STEP 1: Guess rhoR_alpha for next timestep using configured method
+        # STEP 1: Initial guesses for next timestep using configured method
         self.configuration.guess_all_rhoR_alpha(next_timestep, guess_method="from_previous_timestep")
-
-        # STEP 2: Compute rho_R_alpha for next timestep
-        self.configuration.compute_all_rhoR_alpha(next_timestep)
-
+        # TODO: Make sure guess geometry includes active radius for active stress
+        self.configuration.guess_geometry(next_timestep, guess_method="from_previous_timestep")
+        # TODO: Not needed once we pre-allocate arrays with 0. Guess stress for mass production.
+        self.configuration.guess_stress_and_wss(next_timestep)
         
-        # STEP 3: Compute updated values
-        self.configuration.advance_time(self.dt, self.current_timestep)
+        # STEP 2: Compute rhoR_alpha for next timestep
+        self.configuration.compute_all_rhoR_alpha(
+            next_timestep, 
+            self.dt, 
+            self.integration_method,
+            self.survival_function_computation 
+        )
+
+        # STEP 3: Refine geometry based on incompressibility constraint
+        #self.configuration.update_geometry_from_density(next_timestep, guess_variable="mid_radius")
+
+        # STEP 4: Compute geometry for next timestep
+        #self.configuration.compute_theoretical_stress(next_timestep)
+
+        # STEP 5: Compute sigma for next timestep
+        self.configuration.compute_all_stress(
+            next_timestep,
+            self.dt,
+            self.integration_method,
+            self.survival_function_computation  # Reuse same survival values!
+        )
+
+        # STEP 5: Compute radius for next timestep
+        self.configuration.compute_radius(next_timestep)
 
     def _setup_output(self):
         """Setup output files at simulation start."""

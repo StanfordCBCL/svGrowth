@@ -22,9 +22,10 @@ class Configuration:
         config = cls(params)
         
         # Initialize each layer (layer initializes its own constituents)
-        layer_data = params['layer']
-        layer = Layer.from_parameters(layer_data, params)
-        config.add_layer(layer)
+        layers_data = params['layers']
+        for layer_data in layers_data:
+            layer = Layer.from_parameters(layer_data)
+            config.add_layer(layer)
         
         # Add external support layers if present
         # if 'external_supports' in params:
@@ -35,13 +36,12 @@ class Configuration:
 
     @staticmethod
     def _validate_parameters(params):
+        # TODO: Refactor at the end.
         """Validate parameter structure."""
-        if 'layer' not in params:
-            raise ValueError("Missing required parameter section: layer")
-        if 'constituents' not in params['layer']:
-            raise ValueError("Missing required section: layer.constituents")
-        if 'simulation' not in params or 'loading_variables' not in params['simulation']:
-            raise ValueError("Missing required section: simulation.loading_variables")
+        if 'layers' not in params:
+            raise ValueError("Missing required parameter section: layers")
+        if 'simulation' not in params :
+            raise ValueError("Missing required section: simulation")
         
     def _initialize_configuration_from_parameters(self, params):
         """Initialize configuration: validate and create layers."""
@@ -126,10 +126,42 @@ class Configuration:
         
         for layer in self.layers:
             layer.guess_all_rhoR_alpha(target_timestep, guess_method)
-    
-    def compute_all_rhoR_alpha(self, target_timestep):
+
+    def compute_all_rhoR_alpha(self, target_timestep, dt, integration_method, survival_function_computation):
         """Compute mass densities for all constituents in all layers."""
         print(f"Computing rhoR_alpha for all constituents at timestep {target_timestep}")
         
         for layer in self.layers:
-            layer.compute_all_rhoR_alpha(target_timestep)
+            layer.compute_all_rhoR_alpha(
+                target_timestep, 
+                dt, 
+                integration_method, 
+                survival_function_computation
+            )
+
+    def guess_stress_and_wss(self, target_timestep: int) -> None:
+        """Guess stress and wall shear stress for all layers at target timestep."""
+        print(f"  Guessing stress and WSS for all layers at timestep {target_timestep}")
+
+        for layer in self.layers:
+            layer.guess_stress_and_wss(target_timestep)
+
+    def guess_geometry(self, timestep: int, 
+                  guess_method: str = "from_previous_timestep") -> None:
+        """Guess geometry for all layers at target timestep."""
+        for layer in self.layers:
+            layer.guess_geometry(timestep, guess_method)
+
+    def compute_all_stress(self, timestep: int, dt: float, 
+                      integration_method: str,
+                      survival_function_computation: str) -> None:
+        """Compute stresses for all layers."""
+        print(f"Computing stress for all layers at timestep {timestep}")
+        
+        for layer in self.layers:
+            layer.compute_all_stress(
+                timestep,
+                dt,
+                integration_method,
+                survival_function_computation
+            )

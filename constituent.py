@@ -4,23 +4,36 @@ from typing import List, Dict, Any, Optional
 from solid_mechanics import ConstitutiveModel 
 from abc import ABC, abstractmethod
 from kinetics import Kinetics  
+from kinetics_interface import ConstituentKineticsContext
+from solid_mechanics import ConstitutiveModel
+from mechanics_interface import ConstituentMechanicsContext
+
+# Forward reference for Layer (avoids circular import)
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from layer import Layer
 
 class Constituent(ABC):
     """Abstract base class for all constituents."""
     
     def __init__(self, name):
         self.name = name
-        self.layer = None  # Reference to parent layer (set by Layer.add_constituent)
-        self.constitutive_model = None
-        self.kinetics = None 
+        self.layer: Optional['Layer'] = None  # Reference to parent layer (set by Layer.add_constituent)
+        self.kinetics: Optional[Kinetics] = None
+        self.constitutive_model: Optional[ConstitutiveModel] = None # TODO: consider making this mandatory for SingleConstituent. Never initialized for MultiFiberFamilyConstituent.
         
+        # Homeostatic properties
+        self.homeostatic_referential_density: Optional[float] = None
+
         # Referential mass density evolution (rhoR_alpha) - timestep-indexed history
+        self.q_history = []  # List of survival function values over time (for each cohort)
         self.rhoR_alpha_history = []  # List of mass densities over time
         self.sigma_hat_history = []  # List of constituent-based partial stress over time TODO: perhaps make temporary array?
         self.stress_history = []  # List of stress over time
         self.wss_history = []  # List of strain energy density over time
         self.survival_history = [] # List of survival fractions over time (for each cohort)
-        self.k_alpha_history = []  # List of degradation rates over time
+        self.k_alpha_history = []  # List of degradation rates of survival function over time
+        self.mR_alpha_history = []  # List of production rates over time
 
     @classmethod
     def from_parameters(cls, name, properties):
@@ -52,142 +65,7 @@ class Constituent(ABC):
     def _timestep_exists(self, timestep):
         """Check if a specific timestep exists in history."""
         return 0 <= timestep < len(self.rhoR_alpha_history)
-    
-    def _compute_and_store_k_alpha(self, target_timestep):
-        """Compute k_alpha and store in history."""
-        # Constituent provides STATE to Kinetics
-        state = self._get_current_state(target_timestep)
-        
-        # Kinetics computes using its degradation function
-        k_alpha = self.kinetics.compute_k_alpha(
-            current_timestep=target_timestep,
-            deposition_timestep=target_timestep,  # For newly deposited material
-            state=state
-        )
-        
-        # Constituent stores the result
-        self.k_alpha_history.append(k_alpha)
-        return k_alpha
 
-    def _update_survival_history(self, target_timestep):
-        """Update survival for all cohorts."""
-        dt = 1.0  # TODO: Get from simulation
-        
-        # Update survival for each existing cohort (tau)
-        for tau in range(len(self.survival_history)):
-            # Constituent provides state history accessor
-            state_history_func = self._get_state_history_function()
-            
-            # Kinetics computes survival using its survival function
-            q = self.kinetics.compute_survival(
-                deposition_timestep=tau,
-                current_timestep=target_timestep,
-                state_history=state_history_func,
-                dt=dt
-            )
-            
-            # Constituent stores the result
-            self.survival_history[tau].append(q)
-        
-        # Initialize new cohort deposited at target_timestep
-        self.survival_history.append([1.0])
-
-    def _compute_and_store_production_rate(self, target_timestep, k_alpha):
-        """Compute production rate and store in history."""
-        # Constituent provides STATE to Kinetics
-        state = self._get_current_state(target_timestep)
-        
-        # Kinetics computes using its production function
-        mR_alpha = self.kinetics.compute_production_rate(
-            current_timestep=target_timestep,
-            k_alpha=k_alpha,  # Pass pre-computed k_alpha
-            state=state
-        )
-        
-        # Constituent stores the result
-        self.mR_alpha_history.append(mR_alpha)
-        return mR_alpha
-
-     def _integrate_mass_evolution(self, target_timestep, mR_alpha):
-        """Integrate mass evolution (heredity integral + production)."""
-        # This is CONSTITUENT's responsibility - it knows its own history
-        
-        # Heredity integral: sum of survived mass from all cohorts
-        heredity_integral = 0.0
-        for tau in range(len(self.survival_history)):
-            if tau <= target_timestep:
-                rho_tau = self.rhoR_alpha_history[tau]
-                survival_index = target_timestep - tau
-                q = self.survival_history[tau][survival_index]
-                heredity_integral += rho_tau * q
-        
-        # Add production (simplified - you may need to integrate this too)
-        # new_density = heredity_integral + mR_alpha * dt
-        new_density = heredity_integral  # For now, just heredity
-        
-        return new_density
-       
-    #TODO: Consider moving this logic to the numerics/simulation layer, and use set_rhoR_alpha function for the prediction.   
-    def guess_rhoR_alpha(self, target_timestep, guess_method="from_previous_timestep"):
-        """Guess referential mass density for target timestep."""
-          
-        if target_timestep < 0:
-            raise ValueError(f"Target timestep {target_timestep} must be >= 0")
-        
-        if target_timestep == 0:
-            raise ValueError("Cannot guess timestep 0: should be initialized with homeostatic value")
-        
-        if guess_method == "from_previous_timestep":
-            #TODO: When pre-allocating with 0 values, this check needs to be adjusted.
-            if self._timestep_exists(target_timestep):
-                warnings.warn(f"Target timestep {target_timestep} already exists. Returning existing value.")
-                return self.get_rhoR_alpha(target_timestep)
-            
-            previous_timestep = target_timestep - 1
-            
-            if not self._timestep_exists(previous_timestep):
-                raise ValueError(f"Cannot guess timestep {target_timestep}: previous timestep {previous_timestep} does not exist")
-            
-            #TODO: Change this part for pre-allocated arrays, no longer append but set value.
-            previous_density = self.rhoR_alpha_history[previous_timestep]
-            self.rhoR_alpha_history.append(previous_density)
-        else:
-            raise ValueError(f"Unknown guess method: {guess_method}")
-        
-        return self.get_rhoR_alpha(target_timestep)
-    
-    def compute_rhoR_alpha(self, target_timestep):
-        """Compute referential mass density of constituent for target timestep."""
-
-        if target_timestep < 0:
-            raise ValueError(f"Target timestep {target_timestep} must be >= 0")
-
-        if target_timestep == 0:
-            raise ValueError("Cannot compute timestep 0: should be initialized with homeostatic value")
-
-        # If no degradation/production - maintain previous referential mass density
-        if self.kinetics is None:
-            previous_rhoR_alpha = self.rhoR_alpha_history[target_timestep - 1]
-            self.rhoR_alpha_history.append(previous_rhoR_alpha)
-            return self.get_rhoR_alpha(target_timestep)
-        
-        # STEP 1: Compute k_alpha once (Constituent asks Kinetics for computation)
-        k_alpha = self._compute_and_store_k_alpha(target_timestep)
-        
-        # STEP 2: Update survival history (Constituent asks Kinetics for survival)
-        q = self._update_survival_history(target_timestep)
-        
-        # STEP 3: Compute production rate (Constituent asks Kinetics for production)
-        mR_alpha = self._compute_and_store_production_rate(target_timestep, k_alpha)
-        
-        # STEP 4: Integrate (Constituent does the integration itself)
-        rhoR_alpha = self._integrate_mass_evolution(target_timestep, mR_alpha)
-        
-        # STEP 5: Store result
-        self.rhoR_alpha_history.append(rhoR_alpha)
-
-        return self.get_rhoR_alpha(target_timestep)
-    
     # ABSTRACT METHODS - Must be implemented by subclasses
     @abstractmethod
     def get_stress(self):
@@ -198,7 +76,17 @@ class Constituent(ABC):
     def compute_stress(self, current_timestep):
         """Compute total stress contribution."""
         pass
-    
+
+    #TODO: Consider moving this logic to the numerics/simulation layer, and use set_rhoR_alpha function for the prediction.   
+    @abstractmethod
+    def guess_rhoR_alpha(self, target_timestep, guess_method="from_previous_timestep"):
+        """Compute referential mass density of constituent for target timestep."""
+        pass
+
+    @abstractmethod
+    def compute_rhoR_alpha(self, target_timestep, dt, integration_method, survival_strategy):
+        """Compute referential mass density of constituent for target timestep."""
+        pass
 
 class SingleConstituent(Constituent):
     """Single constituent (elastin, muscle, etc.)."""
@@ -206,10 +94,7 @@ class SingleConstituent(Constituent):
     def __init__(self, name):
         super().__init__(name)
         self.params = {}
-        self.constitutive_model = None
-        self.degradation_rate = 0.0
-        self.production_rate = 0.0
-        self.stress_contribution = 0.0
+        self.tau_min = 0
     
     @classmethod
     def from_parameters(cls, name, properties):
@@ -218,18 +103,24 @@ class SingleConstituent(Constituent):
         
         constituent = cls(name)
         
+        # Initialize homeostatic mass density (t=0)
+        constituent.homeostatic_referential_density = properties['mass_fraction'] * 1050.0
+        constituent.rhoR_alpha_history.append(constituent.homeostatic_referential_density)
+        print(f"        Homeostatic mass density (rhoR_alpha at t=0): {constituent.homeostatic_referential_density:.2f} kg/m³")
+
+        # Initialize kinetics
+        if 'kinetics' in properties:
+            constituent.kinetics = Kinetics.from_parameters(properties['kinetics'])
+            constituent._initialize_homeostatic_kinetics()
+        else:
+            print(f"        No kinetics (elastin-like constituent)")
+        
+        # TODO: Set tau_min based on constituent type
+        
         # Initialize constitutive model
         if 'constitutive_model' in properties:
             constituent.constitutive_model = ConstitutiveModel.from_parameters(properties['constitutive_model'])
             print(f"        Constitutive model: {constituent.constitutive_model}")
-        
-        # Initialize kinetics
-        if 'kinetics' in properties:
-            constituent.kinetics = Kinetics.from_parameters(properties['kinetics'])
-        
-        # Initialize homeostatic mass density (t=0)
-        homeostatic_density = properties['mass_fraction'] * 1050.0
-        constituent.rhoR_alpha_history.append(homeostatic_density)
         
         # Initialize active properties if present
         if 'active_properties' in properties:
@@ -239,7 +130,39 @@ class SingleConstituent(Constituent):
         constituent.params = properties.copy()
         
         return constituent
-       
+    
+    def _initialize_homeostatic_kinetics(self) -> None:
+        """Initialize kinetics histories at t=0 (homeostatic state).
+        
+        Assumes rhoR_alpha_history[0] already initialized.
+        
+        At homeostasis:
+        - Production = Degradation (steady state)
+        - mR_h = rhoR_h * k_alpha_h
+        - q(0,0) = 1.0 (just deposited material survives 100%)
+        """
+        print(f"        Homeostatic kinetics:")
+               
+        # Get homeostatic degradation rate from degradation function
+        k_alpha_h = self.kinetics.degradation_function.k_alpha_h
+        
+        # At homeostasis: production = degradation
+        # mR_h = rhoR_h * k_alpha_h (steady state condition)
+        mR_alpha_h = self.homeostatic_referential_density * k_alpha_h
+        
+        # Initialize kinetics histories with t=0 values
+        self.k_alpha_history.append(k_alpha_h)
+        self.mR_alpha_history.append(mR_alpha_h)
+        
+        # Initialize survival history
+        # At t=0, we have one cohort deposited at τ=0 with q(0,0) = 1.0
+        self.survival_history.append([1.0])
+        
+        # Print summary
+        print(f"          k_alpha(0) = {k_alpha_h:.6f} 1/day")
+        print(f"          mR_alpha(0) = {mR_alpha_h:.6f} kg/(m³·day)")
+        print(f"          q(0,0) = 1.0")
+
     def _initialize_active_properties(self, active_props):
         """Initialize active properties."""
         print("        Active properties initialized")
@@ -281,8 +204,154 @@ class SingleConstituent(Constituent):
         base_production = self.params.get('stress_production_gain', 0.0)
         self.production_rate = base_production * stimulus
 
+    #TODO: Consider moving this logic to the numerics/simulation layer, and use set_rhoR_alpha function for the prediction.   
+    def guess_rhoR_alpha(self, target_timestep, guess_method="from_previous_timestep"):
+        """Guess referential mass density for target timestep."""
+          
+        if target_timestep < 0:
+            raise ValueError(f"Target timestep {target_timestep} must be >= 0")
+        
+        if target_timestep == 0:
+            raise ValueError("Cannot guess timestep 0: should be initialized with homeostatic value")
+        
+        if guess_method == "from_previous_timestep":
+            #TODO: When pre-allocating with 0 values, this check needs to be adjusted.
+            if self._timestep_exists(target_timestep):
+                warnings.warn(f"Target timestep {target_timestep} already exists. Returning existing value.")
+                return self.get_rhoR_alpha(target_timestep)
+            
+            previous_timestep = target_timestep - 1
+            
+            if not self._timestep_exists(previous_timestep):
+                raise ValueError(f"Cannot guess timestep {target_timestep}: previous timestep {previous_timestep} does not exist")
+            
+            #TODO: Change this part for pre-allocated arrays, no longer append but set value.
+            previous_density = self.rhoR_alpha_history[previous_timestep]
+            self.rhoR_alpha_history.append(previous_density)
+        else:
+            raise ValueError(f"Unknown guess method: {guess_method}")
+        
+        return self.get_rhoR_alpha(target_timestep)
+
+    def compute_rhoR_alpha(self, target_timestep, dt, integration_method, survival_function_computation):
+        """Compute referential mass density of constituent at target timestep.
+
+        Args:
+            target_timestep: Target time index
+            dt: Time step size (from simulation)
+            integration_method: Integration method ('simpson' or 'trapezoidal')
+            survival_function_computation: Survival strategy ('naive', 'backward')
+        """
+        if target_timestep < 0:
+            raise ValueError(f"Target timestep {target_timestep} must be >= 0")
+        
+        if target_timestep == 0:
+            raise ValueError("Cannot compute timestep 0: should be initialized with homeostatic value")
+
+        # If no degradation/production - maintain previous referential mass density
+        if self.kinetics is None:
+            previous_rhoR_alpha = self.rhoR_alpha_history[target_timestep - 1]
+            self.rhoR_alpha_history.append(previous_rhoR_alpha)
+            return self.get_rhoR_alpha(target_timestep)
+        
+        # Pass necessary data from constituent to kinetics class
+        context = ConstituentKineticsContext(self)
+
+        # STEP 1: Compute k_alpha at target timestep (Constituent asks Kinetics for computation)
+        k_alpha = self.kinetics.compute_k_alpha(context, target_timestep)
+        self.k_alpha_history.append(k_alpha)
+
+        # STEP 2: Compute production rate
+        # TODO: improve fail-safe if we don't have a guess for rhoR_alpha.
+        # Consider how this interacts with guess_rhoR_alpha (which is needed for this step).
+        rhoR_alpha = self.get_rhoR_alpha(target_timestep) # comes from guess
+        mR_alpha = self.kinetics.compute_production_rate(context, target_timestep, k_alpha, rhoR_alpha)
+        self.mR_alpha_history.append(mR_alpha)
+
+        # STEP 3: Compute survival function q(s, tau) for all cohorts
+        survival_values = self.kinetics.compute_survival_function(
+            k_alpha_history=self.k_alpha_history,
+            tau_min=self.tau_min,
+            dt=dt,
+            current_timestep=target_timestep,
+            integration_method=integration_method,
+            survival_function_computation=survival_function_computation
+        )
+        self.q_history.append(survival_values)
+
+        # Step 4: Compute heredity integral (just integrate mR × q!)
+        rhoR_alpha = self.kinetics.compute_heredity_integral(
+            self.mR_alpha_history,
+            survival_values,
+            tau_min=self.tau_min,
+            dt=dt,
+            current_timestep=target_timestep,
+            integration_method=integration_method
+        )
+        
+        self.rhoR_alpha_history[target_timestep] = rhoR_alpha
+
+        return self.get_rhoR_alpha(target_timestep)
+
+    def compute_sigma_alpha(self, target_timestep, dt, integration_method, survival_function_computation):
+        """Compute referential mass density of constituent at target timestep.
+
+        Args:
+            target_timestep: Target time index
+            dt: Time step size (from simulation)
+            integration_method: Integration method ('simpson' or 'trapezoidal')
+        """
+        if target_timestep < 0:
+            raise ValueError(f"Target timestep {target_timestep} must be >= 0")
+        
+        if target_timestep == 0:
+            raise ValueError("Cannot compute timestep 0: should be initialized with homeostatic value")
+        
+        # Pass necessary data from constituent to kinetics class
+        context = ConstituentMechanicsContext(self)
+
+        # STEP 0: Compute survival function q(s, tau) for all cohorts
+        # TODO: This assums we already have k_alpha and mR_alpha. Figure out where to store q.
+        # Generally, q should be known as we first compute_rhoR_alpha before compute_sigma_alpha.
+        # This is computed on-the-fly from k_alpha_history, not stored
+        survival_values = self.kinetics.compute_survival_function(
+            k_alpha_history=self.k_alpha_history,
+            tau_min=self.tau_min,
+            dt=dt,
+            current_timestep=target_timestep,
+            integration_method=integration_method,
+            survival_function_computation=survival_function_computation
+        )
+
+         # Step 1: Compute sigma hat_alpha(s, τ) for all cohorts
+        sigma_hat_alpha = self.mechanics.compute_sigma_hat_alpha(
+            self.mR_alpha_history,
+            survival_values,
+            sigma_hat_alpha = self.sigma_hat_history,
+            tau_min=self.tau_min,
+            dt=dt,  
+            current_timestep=target_timestep,
+            integration_method=integration_method
+        )
+        self.sigma_hat_alpha_history.append(sigma_hat_alpha)
+
+        # Step 2: Compute heredity integral (just integrate (mR/J) × q x sigma_hat_alpha!)
+        sigma_alpha = self.mechanics.compute_heredity_integral(
+            self.mR_alpha_history / J,
+            survival_values,
+            sigma_hat_alpha = self.sigma_hat_history,
+            tau_min=self.tau_min,
+            dt=dt,
+            current_timestep=target_timestep,
+            integration_method=integration_method
+        )
+        self.sigma_alpha_history.append(sigma_alpha)
+
+        return self.get_sigma_alpha(target_timestep)
+
 
 class MultiFiberFamilyConstituent(Constituent):
+    #TODO: To clean up after code works with single constituent.
     """Multi-fiber family constituent (e.g., collagen with multiple orientations)."""
     
     def __init__(self, name):
@@ -306,6 +375,7 @@ class MultiFiberFamilyConstituent(Constituent):
         constituent._validate_mass_fraction_ratios(properties['fiber_families'])
         
         # Create individual fiber families
+        # (Each fiber family initializes its own rhoR and kinetics via SingleConstituent)
         for family_name, family_props in properties['fiber_families'].items():
             fiber_family = constituent._create_fiber_family(family_name, family_props)
             constituent.fiber_families.append(fiber_family)
@@ -313,8 +383,15 @@ class MultiFiberFamilyConstituent(Constituent):
         print(f"        Created {len(constituent.fiber_families)} fiber families")
         
         # Initialize total mass density history (sum of all families at t=0)
-        total_homeostatic_density = sum(family.get_rhoR_alpha(0) for family in constituent.fiber_families)
+        # Assumes each fiber family has rhoR_alpha_history[0] already initialized
+        total_homeostatic_density = sum(
+            family.rhoR_alpha_history[0] for family in constituent.fiber_families
+        )
         constituent.rhoR_alpha_history.append(total_homeostatic_density)
+        print(f"        Total rhoR(0) = {total_homeostatic_density:.2f} kg/m³")
+        
+        # Initialize total kinetics histories (if fiber families have kinetics)
+        constituent._initialize_total_kinetics_histories()
         
         return constituent
     
@@ -403,7 +480,7 @@ class MultiFiberFamilyConstituent(Constituent):
         
         return self.get_rhoR_alpha(target_timestep)
 
-    def compute_rhoR_alpha(self, target_timestep):
+    def compute_rhoR_alpha(self, target_timestep, dt, integration_method, survival_function_computation):
         """Compute rhoR_alpha for all fiber families and update total."""
         if target_timestep < 0:
             raise ValueError(f"Target timestep {target_timestep} must be >= 0")
@@ -412,7 +489,12 @@ class MultiFiberFamilyConstituent(Constituent):
 
         # Compute for each fiber family
         for family in self.fiber_families:
-            family.compute_rhoR_alpha(target_timestep)
+            family.compute_rhoR_alpha(
+                target_timestep, 
+                dt, 
+                integration_method,
+                survival_function_computation
+            )
 
         # Sum total and append
         total_density = sum(family.get_rhoR_alpha(target_timestep) for family in self.fiber_families)
@@ -423,3 +505,39 @@ class MultiFiberFamilyConstituent(Constituent):
     def get_fiber_families(self):
         """Return list of individual fiber families."""
         return self.fiber_families
+
+    def _initialize_total_kinetics_histories(self) -> None:
+        """Initialize total kinetics histories by summing across fiber families.
+        
+        Assumes:
+        - Each fiber family has already initialized its own kinetics
+        - rhoR_alpha_history[0] exists for this multi-fiber constituent
+        
+        The multi-fiber constituent's total kinetics values are the sum
+        of individual fiber family kinetics at t=0.
+        """
+        # Check if any fiber family has kinetics
+        if not self.fiber_families or self.fiber_families[0].kinetics is None:
+            print(f"        No kinetics for multi-fiber constituent")
+            return
+        
+        print(f"        Total homeostatic kinetics:")
+        
+        # Sum kinetics values from all fiber families at t=0
+        total_k_alpha_h = sum(
+            family.k_alpha_history[0] for family in self.fiber_families
+        )
+        total_mR_alpha_h = sum(
+            family.mR_alpha_history[0] for family in self.fiber_families
+        )
+        
+        # Initialize histories
+        self.k_alpha_history.append(total_k_alpha_h)
+        self.mR_alpha_history.append(total_mR_alpha_h)
+        
+        # Survival history for multi-fiber is aggregate (same as fiber families)
+        self.survival_history.append([1.0])
+        
+        print(f"          k_alpha(0) = {total_k_alpha_h:.6f} 1/day")
+        print(f"          mR_alpha(0) = {total_mR_alpha_h:.6f} kg/(m³·day)")
+        print(f"          q(0,0) = 1.0")

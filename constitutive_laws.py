@@ -11,10 +11,17 @@ class IsotropyType(Enum):
 class ConstitutiveModel(ABC):
     """Abstract base class for constitutive models."""
     
-    def __init__(self, isotropy_type, parameters):
-        self.isotropy_type = IsotropyType(isotropy_type)
+    # Subclasses must define this
+    ISOTROPY_TYPE = None
+    
+    def __init__(self, parameters):
         self.parameters = parameters
         self.fiber_orientation = None
+        
+        # Set isotropy from class definition
+        if self.ISOTROPY_TYPE is None:
+            raise NotImplementedError(f"{self.__class__.__name__} must define ISOTROPY_TYPE")
+        self.isotropy_type = self.ISOTROPY_TYPE
         
         # Validate parameters
         self._validate_parameters()
@@ -38,21 +45,20 @@ class ConstitutiveModel(ABC):
     def from_parameters(cls, model_data):
         """Factory method to create constitutive model from parameters."""
         model_type = model_data['type']
-        isotropy = model_data['isotropy']
         parameters = model_data['parameters']
         
         # Create appropriate model
         if model_type == "neo_hookean":
-            model = NeoHookeanModel(isotropy, parameters)
+            model = NeoHookeanModel(parameters)
         elif model_type == "fung_exponential":
-            model = FungExponentialModel(isotropy, parameters)
+            model = FungExponentialModel(parameters)
         elif model_type == "holzapfel_ogden":
-            model = HolzapfelOgdenModel(isotropy, parameters)
+            model = HolzapfelOgdenModel(parameters)
         else:
             raise ValueError(f"Unknown constitutive model type: {model_type}")
         
-        # Set fiber orientation if anisotropic
-        if isotropy == "anisotropic" and 'fiber_orientation' in model_data:
+        # Set fiber orientation if provided (anisotropic models only)
+        if 'fiber_orientation' in model_data:
             angle_degrees = model_data['fiber_orientation']
             model.set_fiber_orientation(angle_degrees)
         
@@ -61,7 +67,10 @@ class ConstitutiveModel(ABC):
     def set_fiber_orientation(self, angle_degrees):
         """Set fiber orientation for anisotropic materials."""
         if self.isotropy_type != IsotropyType.ANISOTROPIC:
-            raise ValueError("Fiber orientation only applies to anisotropic materials")
+            raise ValueError(
+                f"{self.__class__.__name__} is {self.isotropy_type.value}. "
+                "Fiber orientation only applies to anisotropic materials."
+            )
         
         self.fiber_orientation = math.radians(angle_degrees)
         print(f"        Fiber orientation: {angle_degrees}° → {self.fiber_orientation:.3f} rad")
@@ -74,36 +83,43 @@ class ConstitutiveModel(ABC):
         """Check if material is anisotropic."""
         return self.isotropy_type == IsotropyType.ANISOTROPIC
 
+
 # Registry of available models (for validation and documentation)
 AVAILABLE_MODELS = {
     "neo_hookean": {
         "description": "Neo-Hookean model for rubber-like materials",
-        "isotropy": ["isotropic"],
+        "isotropy": "isotropic",
         "parameters": ["c"],
         "units": {"c": "Pa"}
     },
     "fung_exponential": {
         "description": "Fung exponential model for biological tissues",
-        "isotropy": ["isotropic", "anisotropic"],
+        "isotropy": "anisotropic",
         "parameters": ["c1", "c2"],
+        "required": ["fiber_orientation"],  # Must specify fiber direction
         "units": {"c1": "Pa", "c2": "dimensionless"}
     },
     "holzapfel_ogden": {
         "description": "Holzapfel-Ogden model for arterial walls",
-        "isotropy": ["anisotropic"],
+        "isotropy": "anisotropic",  
         "parameters": ["c", "k1", "k2"],
+        "required": ["fiber_orientation"],
         "units": {"c": "Pa", "k1": "Pa", "k2": "dimensionless"}
     }
 }
 
+
 class NeoHookeanModel(ConstitutiveModel):
-    """Neo-Hookean constitutive model for isotropic materials."""
+    """Neo-Hookean constitutive model for isotropic materials.
     
-    def __init__(self, isotropy_type, parameters):
-        if isotropy_type != "isotropic":
-            raise ValueError("Neo-Hookean model is inherently isotropic")
-        
-        super().__init__(isotropy_type, parameters)
+    This model is inherently isotropic - suitable for elastin and other
+    rubber-like biological materials.
+    """
+    
+    ISOTROPY_TYPE = IsotropyType.ISOTROPIC
+    
+    def __init__(self, parameters):
+        super().__init__(parameters)
         self.c = parameters['c']  # Material constant in Pa
     
     def _validate_parameters(self):
@@ -138,12 +154,19 @@ class NeoHookeanModel(ConstitutiveModel):
     
     def __str__(self):
         return f"NeoHookean(c={self.c:.1f} Pa, isotropic)"
-    
+
+
 class FungExponentialModel(ConstitutiveModel):
-    """Fung exponential constitutive model for anisotropic materials."""
+    """Fung exponential constitutive model for anisotropic materials.
     
-    def __init__(self, isotropy_type, parameters):
-        super().__init__(isotropy_type, parameters)
+    This model is inherently anisotropic - suitable for collagen fibers,
+    smooth muscle cells, and other fibrous biological tissues.
+    """
+    
+    ISOTROPY_TYPE = IsotropyType.ANISOTROPIC
+    
+    def __init__(self, parameters):
+        super().__init__(parameters)
         self.c1 = parameters['c1']  # Material constant in Pa
         self.c2 = parameters['c2']  # Dimensionless exponential parameter
     
@@ -187,9 +210,55 @@ class FungExponentialModel(ConstitutiveModel):
         return energy
     
     def __str__(self):
-        isotropy_str = self.isotropy_type.value
         if self.fiber_orientation is not None:
             angle_deg = math.degrees(self.fiber_orientation)
-            return f"FungExponential(c1={self.c1:.1f} Pa, c2={self.c2:.1f}, {isotropy_str}, θ={angle_deg:.1f}°)"
+            return f"FungExponential(c1={self.c1:.1f} Pa, c2={self.c2:.1f}, anisotropic, θ={angle_deg:.1f}°)"
         else:
-            return f"FungExponential(c1={self.c1:.1f} Pa, c2={self.c2:.1f}, {isotropy_str})"
+            return f"FungExponential(c1={self.c1:.1f} Pa, c2={self.c2:.1f}, anisotropic, θ=not set)"
+
+
+class HolzapfelOgdenModel(ConstitutiveModel):
+    """Holzapfel-Ogden constitutive model for arterial walls.
+    
+    This model is inherently anisotropic - designed specifically for
+    fiber-reinforced arterial tissue.
+    """
+    
+    ISOTROPY_TYPE = IsotropyType.ANISOTROPIC
+    
+    def __init__(self, parameters):
+        super().__init__(parameters)
+        self.c = parameters['c']
+        self.k1 = parameters['k1']
+        self.k2 = parameters['k2']
+    
+    def _validate_parameters(self):
+        """Validate Holzapfel-Ogden parameters."""
+        required_params = ['c', 'k1', 'k2']
+        for param in required_params:
+            if param not in self.parameters:
+                raise ValueError(f"Holzapfel-Ogden model requires parameter '{param}'")
+        
+        if self.parameters['c'] <= 0:
+            raise ValueError("Holzapfel-Ogden parameter 'c' must be positive")
+        if self.parameters['k1'] <= 0:
+            raise ValueError("Holzapfel-Ogden parameter 'k1' must be positive")
+        if self.parameters['k2'] <= 0:
+            raise ValueError("Holzapfel-Ogden parameter 'k2' must be positive")
+    
+    def compute_stress(self, deformation_gradient, mass_density=1.0):
+        """Compute Cauchy stress for Holzapfel-Ogden material."""
+        # Placeholder implementation
+        return self.c * mass_density
+    
+    def compute_strain_energy(self, deformation_gradient):
+        """Compute strain energy density."""
+        # Placeholder implementation
+        return self.c
+    
+    def __str__(self):
+        if self.fiber_orientation is not None:
+            angle_deg = math.degrees(self.fiber_orientation)
+            return f"HolzapfelOgden(c={self.c:.1f} Pa, k1={self.k1:.1f} Pa, k2={self.k2:.1f}, anisotropic, θ={angle_deg:.1f}°)"
+        else:
+            return f"HolzapfelOgden(c={self.c:.1f} Pa, k1={self.k1:.1f} Pa, k2={self.k2:.1f}, anisotropic, θ=not set)"

@@ -1,117 +1,190 @@
+# ==============================================================================
+# SIMULATION CONFIGURATION
+# ==============================================================================
 simulation:
-  simulation_name: "latorre2018_updated"
-  output_directory: "output/latorre2018_updated"
+  simulation_name: "latorre2018"
+  output_directory: "outputdir"
   n_days: 701.0
-  dt: 1.0
+  dt: 1.0                      # days
   tolerance: 1e-6
   max_iterations: 50
-  verbose: True
-  loading_variables:
-    P_h: 14.18
-    Q_h: 1.0 # m^3/day or dimensionless
 
-layer:
-  layer_name: "Cerebral artery"
-  a_h: 1.40
-  h_h: 0.12
-  lambda_z_h: 1.0
-  rhoR_h: 1050.0 # in kg/m^3
+  # Numerical methods
+  integration_method: "trapezoidal"                  # For heredity integrals (trapezoidal, simpson)
+  survival_function_computation: "backward"         # For survival function (naive, backward)
+  
+  verbose: true
 
-  constituents:
-    elastin:
-      # Single constituent - same as before
-      constitutive_model:
-        type: "neo_hookean"
-        isotropy: "isotropic"
-        parameters:
-          c: 70.6  # kPa
-      
-      mass_fraction: 0.02
-      deposition_stretch: 1.40
-      degradation_rate: 0.0
-      stress_production_gain: 0.0
-      stress_degradation_gain: 0.0
-      wss_production_gain: 0.0
-      wss_degradation_gain: 0.0
 
-    muscle:
-      # Single constituent with active properties
-      constitutive_model:
-        type: "fung_exponential"
-        isotropy: "anisotropic"
-        fiber_orientation: 90.0  # degrees
-        parameters:
-          c1: 10.0  # kPa
-          c2: 3.5   # dimensionless
-      
-      active_properties:
-        T_act_h: 170.0  # kPa
-        k_act: 0.14285714285714285
-        lambda_0: 0.4
-        lambda_m: 1.1
-        CB: 0.8326
-      
-      mass_fraction: 0.76
-      deposition_stretch: 1.30
-      degradation_rate: 0.07142857142857142
-      stress_production_gain: 2.0
-      stress_degradation_gain: 1.0
-      wss_production_gain: 1.0
-      wss_degradation_gain: 0.0
+# ==============================================================================
+# LAYERS
+# ==============================================================================
+layers:
 
-    collagen:
-      # Multi-family constituent
-      constituent_type: "multi_fiber_family"
+  # ----------------------------------------------------------------------------
+  # Layer 1: Cerebral Artery (Single-layer model)
+  # Primary load-bearing arterial wall
+  # ----------------------------------------------------------------------------
+  - layer_name: "Cerebral artery"
+    rhoR_h: 1050.0               # kg/m³ (homeostatic mass density)
+
+    # --------------------------------------------------------------------------
+    # Homeostatic loading
+    # --------------------------------------------------------------------------
+    loading_variables:
+      P_h: 14.18                 # kPa (homeostatic pressure)
+      Q_h: 1.0                   # dimensionless or m³/day (homeostatic flow)
+      blood_viscosity: 0.004     # Pa*s (for wss calculation)
+    
+    # --------------------------------------------------------------------------
+    # Geometry
+    # --------------------------------------------------------------------------
+    geometry:
+      type: "thin_wall_cylinder"
+      a_h: 1.40                  # mm (homeostatic inner radius)
+      h_h: 0.12                  # mm (homeostatic wall thickness)
+      lambda_z_h: 1.0            # dimensionless (homeostatic axial stretch)
+    
+    # --------------------------------------------------------------------------
+    # Constituents
+    # --------------------------------------------------------------------------
+    constituents:
       
-      # Shared kinetic properties for all collagen fiber families
-      shared_properties:
-        total_mass_fraction: 0.22  # Total collagen mass fraction
-        deposition_stretch: 1.08   # Same for all families
-        degradation_rate: 0.1      # Same for all families
-        stress_production_gain: 1.0
-        stress_degradation_gain: 1.0
-        wss_production_gain: 0.5
-        wss_degradation_gain: 0.0
-      
-      # Individual fiber families with their own mechanical properties
-      fiber_families:
-        circumferential:
-          mass_fraction_ratio: 0.6  # 60% of total collagen mass
-          constitutive_model:
-            type: "fung_exponential"
-            isotropy: "anisotropic"
-            fiber_orientation: 90.0  # degrees (circumferential)
-            parameters:
-              c1: 672.5  # kPa
-              c2: 22.0   # dimensionless
+      # ------------------------------------------------------------------------
+      # ELASTIN
+      # ------------------------------------------------------------------------
+      elastin:
+        mass_fraction: 0.02
+        deposition_stretch: 1.40
         
-        axial:
-          mass_fraction_ratio: 0.4  # 40% of total collagen mass
-          constitutive_model:
-            type: "fung_exponential"
-            isotropy: "anisotropic"
-            fiber_orientation: 0.0   # degrees (axial)
-            parameters:
-              c1: 500.0  # kPa (different from circumferential)
-              c2: 18.0   # dimensionless
+        constitutive_model:
+          type: "neo_hookean"
+          parameters:
+            c: 70.6              # kPa
+      
+      # ------------------------------------------------------------------------
+      # SMOOTH MUSCLE CELLS
+      # ------------------------------------------------------------------------
+      smooth_muscle_cells:
+        mass_fraction: 0.76
+        deposition_stretch: 1.30
         
-        # Optional: Additional fiber families
-        # diagonal_1:
-        #   mass_fraction_ratio: 0.25  # 25% of total collagen
-        #   constitutive_model:
-        #     type: "fung_exponential"
-        #     isotropy: "anisotropic"
-        #     fiber_orientation: 45.0   # degrees
-        #     parameters:
-        #       c1: 400.0
-        #       c2: 15.0
-        # 
-        # diagonal_2:
-        #   mass_fraction_ratio: 0.25  # 25% of total collagen
-        #   constitutive_model:
-        #     type: "fung_exponential"
-        #     isotropy: "anisotropic"
-        #     fiber_orientation: -45.0  # degrees
-        #     parameters:
-        #       c1: 400.0
-        #       c2: 15.0
+        constitutive_model:
+          type: "fung_exponential"
+          fiber_orientation: 90.0  # degrees (circumferential)
+          parameters:
+            c1: 10.0             # kPa
+            c2: 3.5              # dimensionless
+        
+        active_properties:
+          T_act_h: 170.0         # kPa (maximum active stress)
+          k_act: 0.14285714285714285  # 1/day (activation rate)
+          lambda_0: 0.4          # dimensionless (min stretch for activation)
+          lambda_m: 1.1          # dimensionless (optimal stretch)
+          CB: 0.8326             # dimensionless (basal calcium)
+        
+        kinetics:
+          production:
+            stimulus_function_form: "linear"
+            gain_params:
+              intramural_stress: 2.0
+              wss: -1.0
+          
+          degradation:
+            survival_function_form: "exponential"
+            deg_rate:
+              type: "quadratic"
+              k_alpha_h: 0.07142857142857142  # 1/day (homeostatic degradation rate)
+              gain_params:
+                intramural_stress: 1.0
+      
+      # ------------------------------------------------------------------------
+      # COLLAGEN (Multi-Fiber Family)
+      # ------------------------------------------------------------------------
+      collagen:
+        constituent_type: "multi_fiber_family"
+        
+        # Shared properties (kinetics same for all fiber families)
+        shared_properties:
+          total_mass_fraction: 0.22
+          deposition_stretch: 1.08
+          
+          kinetics:
+            production:
+              stimulus_function_form: "linear"
+              gain_params:
+                intramural_stress: 1.0
+                wss: -0.5
+            
+            degradation:
+              survival_function_form: "exponential"
+              deg_rate:
+                type: "quadratic"
+                k_alpha_h: 0.1   # 1/day (homeostatic degradation rate)
+                gain_params:
+                  intramural_stress: 1.0
+        
+        # Individual fiber families (different mechanical properties)
+        fiber_families:
+          
+          circumferential:
+            mass_fraction_ratio: 0.6  # 60% of total collagen
+            constitutive_model:
+              type: "fung_exponential"
+              isotropy: "anisotropic"
+              fiber_orientation: 90.0  # degrees (circumferential)
+              parameters:
+                c1: 672.5        # kPa
+                c2: 22.0         # dimensionless
+          
+          axial:
+            mass_fraction_ratio: 0.4  # 40% of total collagen
+            constitutive_model:
+              type: "fung_exponential"
+              isotropy: "anisotropic"
+              fiber_orientation: 0.0  # degrees (axial)
+              parameters:
+                c1: 500.0        # kPa
+                c2: 18.0         # dimensionless
+          
+          # Optional: Additional diagonal families
+          # diagonal_1:
+          #   mass_fraction_ratio: 0.25  # 25% of total collagen
+          #   constitutive_model:
+          #     type: "fung_exponential"
+          #     isotropy: "anisotropic"
+          #     fiber_orientation: 45.0  # degrees
+          #     parameters:
+          #       c1: 400.0      # kPa
+          #       c2: 15.0       # dimensionless
+          # 
+          # diagonal_2:
+          #   mass_fraction_ratio: 0.25  # 25% of total collagen
+          #   constitutive_model:
+          #     type: "fung_exponential"
+          #     isotropy: "anisotropic"
+          #     fiber_orientation: -45.0  # degrees
+          #     parameters:
+          #       c1: 400.0      # kPa
+          #       c2: 15.0       # dimensionless
+
+  # ----------------------------------------------------------------------------
+  # Future: Layer 2 - Adventitia (when implementing multi-layer models)
+  # ----------------------------------------------------------------------------
+  # - layer_name: "adventitia"
+  #   rhoR_h: 1050.0
+  #   
+  #   loading_variables:
+  #     P_h: 0.0               # No intramural pressure (external layer)
+  #     Q_h: 0.0
+  #     blood_viscosity: 0.004
+  #   
+  #   geometry:
+  #     type: "thin_wall_cylinder"
+  #     a_h: 1.52              # Starts at media's outer radius
+  #     h_h: 0.08
+  #     lambda_z_h: 1.0
+  #   
+  #   constituents:
+  #     collagen_adventitial:
+  #       # ... adventitial collagen properties ...

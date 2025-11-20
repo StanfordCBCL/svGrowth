@@ -8,59 +8,132 @@ This module defines:
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional, Callable
+from typing import Optional
 
+
+# =============================================================================
+# EXCEPTIONS
+# =============================================================================
+
+class KineticsDataNotAvailableError(Exception):
+    """Raised when kinetics requests data that is not available."""
+    pass
 
 # =============================================================================
 # ABSTRACT INTERFACE - The contract that Kinetics depends on
 # =============================================================================
 
 class KineticsContext(ABC):
-    """Abstract interface for providing state variables to kinetics computations.
+    """Abstract interface for accessing constituent/layer data in kinetics computations.
     
-    This decouples Kinetics from knowing about specific data structures.
-    Any class can implement this interface to provide data to Kinetics.
+    This adapter pattern decouples kinetics computations from the specific
+    data structures of Constituent and Layer classes.
+    
+    Implementations should:
+    1. Map stimulus names (e.g., 'intramural_stress') to actual data sources
+    2. Handle missing data gracefully (raise KineticsDataNotAvailableError)
+    3. Provide both current and homeostatic values for stimuli
     """
     
+    # =================================================================
+    # ABSTRACT METHODS - Must be implemented by subclasses
+    # =================================================================
+    
     @abstractmethod
-    def get_cauchy_stress(self) -> float:
-        """Get current Cauchy stress (total stress)."""
+    def get_stimulus(self, stimulus_name: str, timestep: int) -> float:
+        """Get current value of a stimulus at specified timestep.
+        
+        Args:
+            stimulus_name: Name of stimulus (e.g., 'intramural_stress', 'wss')
+            timestep: Timestep at which to retrieve value
+            
+        Returns:
+            Current stimulus value
+            
+        Raises:
+            ValueError: If stimulus_name is not recognized
+            KineticsDataNotAvailableError: If data is not available
+            
+        Example:
+            >>> context.get_stimulus('intramural_stress', 10)
+            150000.0  # Pa
+        """
         pass
     
     @abstractmethod
-    def get_cauchy_stress_homeostatic(self) -> float:
-        """Get homeostatic Cauchy stress."""
+    def get_stimulus_homeostatic(self, stimulus_name: str) -> float:
+        """Get homeostatic (reference) value of a stimulus.
+        
+        Args:
+            stimulus_name: Name of stimulus (e.g., 'intramural_stress', 'wss')
+            
+        Returns:
+            Homeostatic stimulus value
+            
+        Raises:
+            ValueError: If stimulus_name is not recognized
+            KineticsDataNotAvailableError: If data is not available
+            
+        Example:
+            >>> context.get_stimulus_homeostatic('intramural_stress')
+            100000.0  # Pa
+        """
         pass
     
-    @abstractmethod
-    def get_wall_shear_stress(self) -> float:
-        """Get current wall shear stress."""
-        pass
+    # =================================================================
+    # CONSTITUENT-SPECIFIC DATA ACCESS
+    # =================================================================
     
-    @abstractmethod
-    def get_wall_shear_stress_homeostatic(self) -> float:
-        """Get homeostatic wall shear stress."""
-        pass
+    def get_rhoR_alpha(self, timestep: int) -> float:
+        """Get constituent mass density at specified timestep.
+        
+        Args:
+            timestep: Timestep at which to retrieve density
+            
+        Returns:
+            Referential mass density (kg/m³)
+            
+        Raises:
+            KineticsDataNotAvailableError: If data is not available
+        """
+        if not hasattr(self, 'constituent'):
+            raise KineticsDataNotAvailableError(
+                "Context does not have constituent reference"
+            )
+        
+        return self.constituent.get_rhoR_alpha(timestep)
     
-    @abstractmethod
-    def get_constituent_stress(self) -> float:
-        """Get constituent's stress contribution (if applicable)."""
-        pass
-    
-    @abstractmethod
-    def get_inflammation(self) -> float:
-        """Get inflammation level."""
-        pass
-    
-    @abstractmethod
-    def get_rhoR_alpha(self) -> float:
-        """Get referential mass density (if applicable)."""
-        pass
-    
-    @abstractmethod
-    def get_timestep(self) -> int:
-        """Get current timestep."""
-        pass
+    def get_survival(self, deposition_timestep: int, current_timestep: int) -> float:
+        """Get survival fraction for cohort deposited at deposition_timestep.
+        
+        Args:
+            deposition_timestep: When cohort was deposited
+            current_timestep: Current timestep
+            
+        Returns:
+            Survival fraction q(τ, s) ∈ [0, 1]
+            
+        Raises:
+            KineticsDataNotAvailableError: If data is not available
+        """
+        if not hasattr(self, 'constituent'):
+            raise KineticsDataNotAvailableError(
+                "Context does not have constituent reference"
+            )
+        
+        cohort_age = current_timestep - deposition_timestep
+        
+        if deposition_timestep < 0 or deposition_timestep >= len(self.constituent.survival_history):
+            raise KineticsDataNotAvailableError(
+                f"No survival data for cohort deposited at t={deposition_timestep}"
+            )
+        
+        if cohort_age < 0 or cohort_age >= len(self.constituent.survival_history[deposition_timestep]):
+            raise KineticsDataNotAvailableError(
+                f"No survival data for cohort age {cohort_age}"
+            )
+        
+        return self.constituent.survival_history[deposition_timestep][cohort_age]
 
 
 # =============================================================================
@@ -68,277 +141,180 @@ class KineticsContext(ABC):
 # =============================================================================
 
 class ConstituentKineticsContext(KineticsContext):
-    """Adapter: Provides constituent and layer data to kinetics.
+    """Concrete implementation: Maps stimulus names to Constituent/Layer data sources."""
     
-    Use this when computing kinetics for a specific constituent.
-    """
-    
-    def __init__(self, constituent, timestep: int):
-        """Initialize context for constituent at specific timestep.
+    def __init__(self, constituent):
+        """Initialize context with constituent reference.
         
         Args:
-            constituent: Constituent instance
-            timestep: Which timestep to access
+            constituent: Constituent instance (provides access to Layer via constituent.layer)
         """
         self.constituent = constituent
         self.layer = constituent.layer
-        self.timestep = timestep
     
-    def get_cauchy_stress(self) -> float:
-        """Get total Cauchy stress from layer."""
-        if self.layer and hasattr(self.layer, 'stress_history'):
-            if self.timestep < len(self.layer.stress_history):
-                return self.layer.stress_history[self.timestep]
-        return 0.0
+    # =================================================================
+    # IMPLEMENT ABSTRACT METHODS
+    # =================================================================
     
-    def get_cauchy_stress_homeostatic(self) -> float:
-        """Get homeostatic Cauchy stress from layer."""
-        if self.layer and hasattr(self.layer, 'stress_homeostatic'):
-            return self.layer.stress_homeostatic
-        return 0.0
-    
-    def get_wall_shear_stress(self) -> float:
-        """Get wall shear stress from layer."""
-        if self.layer and hasattr(self.layer, 'wss_history'):
-            if self.timestep < len(self.layer.wss_history):
-                return self.layer.wss_history[self.timestep]
-        return 0.0
-    
-    def get_wall_shear_stress_homeostatic(self) -> float:
-        """Get homeostatic WSS from layer."""
-        if self.layer and hasattr(self.layer, 'wss_homeostatic'):
-            return self.layer.wss_homeostatic
-        return 0.0
-    
-    def get_constituent_stress(self) -> float:
-        """Get constituent's own stress contribution."""
-        if hasattr(self.constituent, 'stress_history'):
-            if self.timestep < len(self.constituent.stress_history):
-                return self.constituent.stress_history[self.timestep]
-        return 0.0
-    
-    def get_inflammation(self) -> float:
-        """Get inflammation - try layer first, then constituent."""
-        # Try layer (systemic)
-        if self.layer and hasattr(self.layer, 'inflammation_history'):
-            if self.timestep < len(self.layer.inflammation_history):
-                return self.layer.inflammation_history[self.timestep]
+    def get_stimulus(self, stimulus_name: str, timestep: int) -> float:
+        """Map stimulus name to appropriate data source.
         
-        # Try constituent (local)
-        if hasattr(self.constituent, 'inflammation_history'):
-            if self.timestep < len(self.constituent.inflammation_history):
-                return self.constituent.inflammation_history[self.timestep]
-        
-        return 0.0
-    
-    def get_rhoR_alpha(self) -> float:
-        """Get constituent's referential mass density."""
-        if self.timestep < len(self.constituent.rhoR_alpha_history):
-            return self.constituent.rhoR_alpha_history[self.timestep]
-        return 0.0
-    
-    def get_timestep(self) -> int:
-        """Get current timestep."""
-        return self.timestep
-
-
-# =============================================================================
-# LAYER ADAPTER - Provides layer-level data
-# =============================================================================
-
-class LayerKineticsContext(KineticsContext):
-    """Adapter: Provides layer-level data to kinetics.
-    
-    Use this when computing layer-level kinetics (e.g., ECM remodeling).
-    """
-    
-    def __init__(self, layer, timestep: int):
-        """Initialize context for layer at specific timestep.
-        
-        Args:
-            layer: Layer instance
-            timestep: Which timestep to access
+        Supported stimuli:
+        - 'intramural_stress': Layer stress history
+        - 'constituent_stress': Constituent stress history
+        - 'wss': Wall shear stress from layer
+        - 'inflammation': Inflammation (layer or constituent)
         """
-        self.layer = layer
-        self.timestep = timestep
-    
-    def get_cauchy_stress(self) -> float:
-        """Get total layer stress."""
-        if hasattr(self.layer, 'stress_history'):
-            if self.timestep < len(self.layer.stress_history):
-                return self.layer.stress_history[self.timestep]
-        return 0.0
-    
-    def get_cauchy_stress_homeostatic(self) -> float:
-        """Get homeostatic stress."""
-        if hasattr(self.layer, 'stress_homeostatic'):
-            return self.layer.stress_homeostatic
-        return 0.0
-    
-    def get_wall_shear_stress(self) -> float:
-        """Get wall shear stress."""
-        if hasattr(self.layer, 'wss_history'):
-            if self.timestep < len(self.layer.wss_history):
-                return self.layer.wss_history[self.timestep]
-        return 0.0
-    
-    def get_wall_shear_stress_homeostatic(self) -> float:
-        """Get homeostatic WSS."""
-        if hasattr(self.layer, 'wss_homeostatic'):
-            return self.layer.wss_homeostatic
-        return 0.0
-    
-    def get_constituent_stress(self) -> float:
-        """Layer doesn't have constituent-specific stress."""
-        return 0.0
-    
-    def get_inflammation(self) -> float:
-        """Get layer-level inflammation."""
-        if hasattr(self.layer, 'inflammation_history'):
-            if self.timestep < len(self.layer.inflammation_history):
-                return self.layer.inflammation_history[self.timestep]
-        return 0.0
-    
-    def get_rhoR_alpha(self) -> float:
-        """Get total layer mass density (sum of all constituents)."""
-        if hasattr(self.layer, 'total_mass_history'):
-            if self.timestep < len(self.layer.total_mass_history):
-                return self.layer.total_mass_history[self.timestep]
-        return 0.0
-    
-    def get_timestep(self) -> int:
-        """Get current timestep."""
-        return self.timestep
-
-
-# =============================================================================
-# CONFIGURATION ADAPTER - Provides configuration-level data
-# =============================================================================
-
-class ConfigurationKineticsContext(KineticsContext):
-    """Adapter: Provides configuration/simulation-level data to kinetics.
-    
-    Use this for global kinetics parameters that don't depend on 
-    specific constituents or layers (e.g., system-wide inflammation).
-    """
-    
-    def __init__(self, configuration, timestep: int):
-        """Initialize context from configuration.
+        if stimulus_name == 'intramural_stress':
+            return self._get_layer_stress(timestep)
         
-        Args:
-            configuration: Configuration instance
-            timestep: Which timestep to access
-        """
-        self.configuration = configuration
-        self.timestep = timestep
-    
-    def get_cauchy_stress(self) -> float:
-        """Get average stress across all layers."""
-        if hasattr(self.configuration, 'global_stress_history'):
-            if self.timestep < len(self.configuration.global_stress_history):
-                return self.configuration.global_stress_history[self.timestep]
-        return 0.0
-    
-    def get_cauchy_stress_homeostatic(self) -> float:
-        """Get global homeostatic stress."""
-        if hasattr(self.configuration, 'global_stress_homeostatic'):
-            return self.configuration.global_stress_homeostatic
-        return 0.0
-    
-    def get_wall_shear_stress(self) -> float:
-        """Get global WSS."""
-        if hasattr(self.configuration, 'global_wss_history'):
-            if self.timestep < len(self.configuration.global_wss_history):
-                return self.configuration.global_wss_history[self.timestep]
-        return 0.0
-    
-    def get_wall_shear_stress_homeostatic(self) -> float:
-        """Get global homeostatic WSS."""
-        if hasattr(self.configuration, 'global_wss_homeostatic'):
-            return self.configuration.global_wss_homeostatic
-        return 0.0
-    
-    def get_constituent_stress(self) -> float:
-        """Not applicable at configuration level."""
-        return 0.0
-    
-    def get_inflammation(self) -> float:
-        """Get systemic inflammation level."""
-        if hasattr(self.configuration, 'systemic_inflammation_history'):
-            if self.timestep < len(self.configuration.systemic_inflammation_history):
-                return self.configuration.systemic_inflammation_history[self.timestep]
-        return 0.0
-    
-    def get_rhoR_alpha(self) -> float:
-        """Not applicable at configuration level."""
-        return 0.0
-    
-    def get_timestep(self) -> int:
-        """Get current timestep."""
-        return self.timestep
-
-
-# =============================================================================
-# CONTEXT FACTORY - Creates appropriate context based on source
-# =============================================================================
-
-class KineticsContextFactory:
-    """Factory for creating kinetics contexts from different data sources."""
-    
-    def __init__(self, data_source):
-        """Initialize factory with data source.
+        elif stimulus_name == 'constituent_stress':
+            return self._get_constituent_stress(timestep)
         
-        Args:
-            data_source: Can be Constituent, Layer, or Configuration
-        """
-        self.data_source = data_source
-        self._context_type = self._determine_context_type()
-    
-    def _determine_context_type(self):
-        """Determine which context type to use based on data source."""
-        from constituent import Constituent
-        from layer import Layer
-        from configuration import Configuration
+        elif stimulus_name == 'wss':
+            return self._get_wall_shear_stress(timestep)
         
-        if isinstance(self.data_source, Constituent):
-            return ConstituentKineticsContext
-        elif isinstance(self.data_source, Layer):
-            return LayerKineticsContext
-        elif isinstance(self.data_source, Configuration):
-            return ConfigurationKineticsContext
+        elif stimulus_name == 'inflammation':
+            return self._get_inflammation(timestep)
+        
         else:
-            raise ValueError(f"Unknown data source type: {type(self.data_source)}")
+            raise ValueError(
+                f"Unknown stimulus: '{stimulus_name}'. "
+                f"Supported stimuli: intramural_stress, constituent_stress, wss, inflammation"
+            )
     
-    def create_context(self, timestep: int) -> KineticsContext:
-        """Create context for specified timestep.
+    def get_stimulus_homeostatic(self, stimulus_name: str) -> float:
+        """Get homeostatic value for stimulus."""
+        if stimulus_name == 'intramural_stress':
+            return self._get_layer_stress_homeostatic()
         
-        Args:
-            timestep: Timestep to access
+        elif stimulus_name == 'constituent_stress':
+            # Use layer homeostatic as proxy (constituent doesn't track its own)
+            return self._get_layer_stress_homeostatic()
         
-        Returns:
-            Appropriate KineticsContext instance
-        """
-        return self._context_type(self.data_source, timestep)
+        elif stimulus_name == 'wss':
+            return self._get_wall_shear_stress_homeostatic()
+        
+        elif stimulus_name == 'inflammation':
+            return 0.0  # Homeostatic inflammation is zero
+        
+        else:
+            raise ValueError(
+                f"Unknown stimulus: '{stimulus_name}'. "
+                f"Supported stimuli: intramural_stress, constituent_stress, wss, inflammation"
+            )
     
-    def __call__(self, timestep: int) -> KineticsContext:
-        """Allow factory to be called as function: factory(timestep)"""
-        return self.create_context(timestep)
+    # =================================================================
+    # PRIVATE HELPER METHODS - Actual data access
+    # =================================================================
+    
+    def _get_layer_stress(self, timestep: int) -> float:
+        """Get intramural stress from layer (with fallback to previous timestep)."""
+        if not self.layer:
+            raise KineticsDataNotAvailableError("Layer not available")
+        
+        try:
+            # Try to get stress at requested timestep
+            return self.layer.get_stress_trace(timestep)
+        except (IndexError, ValueError, AttributeError):
+            # Fallback to previous timestep
+            if timestep > 0:
+                try:
+                    print(f"  [INFO]: Layer stress not available at t={timestep}, using t={timestep-1}")
+                    return self.layer.get_stress_trace(timestep - 1)
+                except (IndexError, ValueError, AttributeError):
+                    pass
+        
+        raise KineticsDataNotAvailableError(
+            f"Could not get layer stress at timestep {timestep} or {timestep-1}"
+        )
 
+    def _get_layer_stress_homeostatic(self) -> float:
+        """Get homeostatic layer stress."""
+        if not self.layer:
+            raise KineticsDataNotAvailableError("Layer not available")
+        try:
+            return self.layer.get_stress_trace(0)  # Assume t=0 is homeostatic
+            # TODO: Clean this up with separate function.
+        except (IndexError, ValueError, AttributeError) as e:
+            raise KineticsDataNotAvailableError(f"Could not get layer stress: {e}")        
 
-# =============================================================================
-# HELPER FUNCTIONS
-# =============================================================================
+    def _get_constituent_stress(self, timestep: int) -> float:
+        """Get stress from this specific constituent (with fallback)."""
+        if not hasattr(self.constituent, 'stress_history'):
+            raise KineticsDataNotAvailableError("Constituent stress not available")
+        
+        try:
+            # Try to get stress at requested timestep
+            return self.constituent.stress_history[timestep]
+        except (IndexError, ValueError, AttributeError):
+            # Fallback to previous timestep
+            if timestep > 0:
+                try:
+                    print(f"  Warning: Constituent stress not available at t={timestep}, using t={timestep-1}")
+                    return self.constituent.stress_history[timestep - 1]
+                except (IndexError, ValueError, AttributeError):
+                    pass
+        
+        raise KineticsDataNotAvailableError(
+            f"Could not get constituent stress at timestep {timestep} or {timestep-1}"
+        )
 
-def create_context_for_constituent(constituent, timestep: int) -> ConstituentKineticsContext:
-    """Convenience function to create constituent context."""
-    return ConstituentKineticsContext(constituent, timestep)
+    def _get_wall_shear_stress(self, timestep: int) -> float:
+        """Get wall shear stress from layer (with fallback)."""
+        if not self.layer or not hasattr(self.layer, 'wss_history'):
+            raise KineticsDataNotAvailableError("Wall shear stress not available")
+        
+        try:
+            # Try to get WSS at requested timestep
+            return self.layer.wss_history[timestep]
+        except (IndexError, ValueError, AttributeError):
+            # Fallback to previous timestep
+            if timestep > 0:
+                try:
+                    print(f"  [INFO]: WSS not available at t={timestep}, using t={timestep-1}")
+                    return self.layer.wss_history[timestep - 1]
+                except (IndexError, ValueError, AttributeError):
+                    pass
+        
+        raise KineticsDataNotAvailableError(
+            f"Could not get WSS at timestep {timestep} or {timestep-1}"
+        )
 
-
-def create_context_for_layer(layer, timestep: int) -> LayerKineticsContext:
-    """Convenience function to create layer context."""
-    return LayerKineticsContext(layer, timestep)
-
-
-def create_context_for_configuration(configuration, timestep: int) -> ConfigurationKineticsContext:
-    """Convenience function to create configuration context."""
-    return ConfigurationKineticsContext(configuration, timestep)
+    def _get_wall_shear_stress_homeostatic(self) -> float:
+        """Get homeostatic wall shear stress."""
+        if not self.layer or not hasattr(self.layer, 'homeostatic_wss'):
+            raise KineticsDataNotAvailableError(
+                f"Homeostatic wall shear stress not available"
+            )
+        return self.layer.homeostatic_wss
+    
+    def _get_inflammation(self, timestep: int) -> float:
+        """Get inflammation (with fallback to previous timestep)."""
+        # Try layer first (systemic inflammation)
+        if self.layer and hasattr(self.layer, 'inflammation_history'):
+            try:
+                return self.layer.inflammation_history[timestep]
+            except (IndexError, ValueError, AttributeError):
+                if timestep > 0:
+                    try:
+                        print(f"  [INFO]: Layer inflammation not available at t={timestep}, using t={timestep-1}")
+                        return self.layer.inflammation_history[timestep - 1]
+                    except (IndexError, ValueError, AttributeError):
+                        pass
+    
+        # Try constituent (local inflammation)
+        if hasattr(self.constituent, 'inflammation_history'):
+            try:
+                return self.constituent.inflammation_history[timestep]
+            except (IndexError, ValueError, AttributeError):
+                if timestep > 0:
+                    try:
+                        print(f"  [INFO]: Constituent inflammation not available at t={timestep}, using t={timestep-1}")
+                        return self.constituent.inflammation_history[timestep - 1]
+                    except (IndexError, ValueError, AttributeError):
+                        pass
+                    
+        raise KineticsDataNotAvailableError(
+            f"Inflammation not available at timestep {timestep} or {timestep-1}"
+        )

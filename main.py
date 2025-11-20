@@ -3,7 +3,7 @@ from configuration import Configuration
 from simulation import Simulation
 
 def main():
-    """Main entry point for pyGrowth simulation."""
+    """Main entry point for svGrowth simulation."""
     # Read input parameter file
     io_handler = IOHandler()
     params = io_handler.load_parameters("latorre2018_updated.yaml")
@@ -11,7 +11,7 @@ def main():
     # Create and initialize vessel configuration 
     config = Configuration.from_parameters(params)
 
-    # Extract simulation control parameters
+    # Extract simulation parameters
     sim_params = params['simulation']
     
     # Initialize and run simulation
@@ -24,11 +24,12 @@ def main():
         n_steps=int(sim_params['n_days'] / sim_params['dt']),
         tolerance=sim_params.get('tolerance', 1e-6),
         max_iterations=sim_params.get('max_iterations', 50),
+        integration_method=sim_params.get('integration_method', 'trapezoidal'),
+        survival_function_computation=sim_params.get('survival_function_computation', 'backward'), 
         verbose=sim_params.get('verbose', False)
     )
     
     sim.run()
-    sim.save_final_configuration()
 
 if __name__ == "__main__":
     main()
