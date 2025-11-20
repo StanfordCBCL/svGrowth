@@ -1,6 +1,6 @@
 # pyGrowth
 
-A constrained mixture model framework for simulating growth and remodeling (G&R) in biological tissues, with a focus on arterial wall mechanics.
+A constrained mixture model framework for simulating growth and remodeling (G&R) in biological tissues, with a focus on arterial and venous wall mechanics.
 
 ## Overview
 
