@@ -2,6 +2,7 @@ import math
 import numpy as np
 from abc import ABC, abstractmethod
 from enum import Enum
+from tensor_operations import TensorOperations
 
 class IsotropyType(Enum):
     """Enumeration for material isotropy types."""
@@ -16,7 +17,9 @@ class ConstitutiveModel(ABC):
     
     def __init__(self, parameters):
         self.parameters = parameters
+        #TODO: move these to Fung explonential only? Not general for all laws.
         self.fiber_orientation = None
+        self.fiber_angle_degrees = None
         
         # Set isotropy from class definition
         if self.ISOTROPY_TYPE is None:
@@ -32,8 +35,8 @@ class ConstitutiveModel(ABC):
         pass
     
     @abstractmethod
-    def compute_stress(self, deformation_gradient, mass_density=1.0):
-        """Compute Cauchy stress from deformation gradient."""
+    def compute_PK2_stress(self, deformation_gradient):
+        """Compute deviatoric 2nd Piola–Kirchhoff stress from deformation gradient."""
         pass
     
     @abstractmethod
@@ -46,13 +49,23 @@ class ConstitutiveModel(ABC):
         """Factory method to create constitutive model from parameters."""
         model_type = model_data['type']
         parameters = model_data['parameters']
+
+        kPa_to_Pa = 1000.0
         
         # Create appropriate model
         if model_type == "neo_hookean":
+            if 'c' in parameters:
+                parameters['c'] = float(parameters['c']) * kPa_to_Pa
             model = NeoHookeanModel(parameters)
         elif model_type == "fung_exponential":
+            if 'c1' in parameters:
+                parameters['c1'] = float(parameters['c1']) * kPa_to_Pa
             model = FungExponentialModel(parameters)
         elif model_type == "holzapfel_ogden":
+            if 'c' in parameters:
+                parameters['c'] = float(parameters['c']) * kPa_to_Pa
+            if 'k1' in parameters:
+                parameters['k1'] = float(parameters['k1']) * kPa_to_Pa
             model = HolzapfelOgdenModel(parameters)
         else:
             raise ValueError(f"Unknown constitutive model type: {model_type}")
@@ -65,15 +78,38 @@ class ConstitutiveModel(ABC):
         return model
     
     def set_fiber_orientation(self, angle_degrees):
-        """Set fiber orientation for anisotropic materials."""
+        """Set fiber orientation for anisotropic material.
+        
+        Overrides base class to store as numpy array (unit vector).
+        
+        Args:
+            angle_degrees: Fiber angle measured from axial direction (degrees)
+                          0° = axial, 90° = circumferential
+        """
         if self.isotropy_type != IsotropyType.ANISOTROPIC:
             raise ValueError(
                 f"{self.__class__.__name__} is {self.isotropy_type.value}. "
                 "Fiber orientation only applies to anisotropic materials."
             )
         
-        self.fiber_orientation = math.radians(angle_degrees)
-        print(f"        Fiber orientation: {angle_degrees}° → {self.fiber_orientation:.3f} rad")
+        # TODO: to either generalize or add communication to kinematics for coordinate system and 
+        # balance equations? For now, assume cylindrical coords (r, θ, z).
+        self.fiber_angle_degrees = angle_degrees
+        theta = math.radians(angle_degrees)
+        
+        # Fiber direction in cylindrical coords (r, θ, z)
+        # Convention: angle measured from axial (z) direction
+        a0 = np.array([
+            0.0,              # radial component (none for thin-wall)
+            np.sin(theta),    # circumferential component
+            np.cos(theta)     # axial component
+        ], dtype=float)
+        
+        # Store as unit vector
+        self.fiber_orientation = a0 / np.linalg.norm(a0)
+        
+        print(f"        Fiber orientation: {angle_degrees}° → "
+              f"a0 = [{a0[0]:.3f}, {a0[1]:.3f}, {a0[2]:.3f}]")
     
     def is_isotropic(self):
         """Check if material is isotropic."""
@@ -83,7 +119,40 @@ class ConstitutiveModel(ABC):
         """Check if material is anisotropic."""
         return self.isotropy_type == IsotropyType.ANISOTROPIC
 
-
+    # ------------------------------------------------------------------
+    # Static helper methods
+    # ------------------------------------------------------------------
+    
+    @staticmethod
+    def compute_fiber_stretch(F: np.ndarray, a0: np.ndarray) -> float:
+        """Compute fiber stretch λ_f = sqrt(a0 · C · a0).
+        
+        Args:
+            F: Deformation gradient (3×3)
+            a0: Fiber direction unit vector (3,)
+            
+        Returns:
+            Fiber stretch λ_f (dimensionless)
+        """
+        C = TensorOperations.right_cauchy_green(F)
+        return math.sqrt(a0 @ C @ a0)
+    
+    @staticmethod
+    def compute_fiber_strain(F: np.ndarray, a0: np.ndarray) -> float:
+        """Compute fiber Green-Lagrange strain E_f = a0 · E · a0.
+        
+        Args:
+            F: Deformation gradient (3×3)
+            a0: Fiber direction unit vector (3,)
+            
+        Returns:
+            Fiber strain E_f (dimensionless)
+        """
+        C = TensorOperations.right_cauchy_green(F)
+        I = np.eye(3)
+        E = 0.5 * (C - I) # TODO: tensor operations function for this?
+        return float(a0 @ E @ a0)
+    
 # Registry of available models (for validation and documentation)
 AVAILABLE_MODELS = {
     "neo_hookean": {
@@ -129,26 +198,23 @@ class NeoHookeanModel(ConstitutiveModel):
         if self.parameters['c'] <= 0:
             raise ValueError("Neo-Hookean parameter 'c' must be positive")
     
-    def compute_stress(self, deformation_gradient, mass_density=1.0):
-        """Compute Cauchy stress for Neo-Hookean material."""
-        F = deformation_gradient  # Deformation gradient (assumed scalar for 1D)
-        
-        # Left Cauchy-Green deformation tensor B = F * F^T
-        B = F @ F.T
-        
-        # Neo-Hookean stress for incompressible material
-        stress = self.c * B
-       
-        return stress
-    
+    def compute_PK2_stress(self, deformation_gradient):
+        """Compute deviatoric 2nd Piola–Kirchhoff stress for incompressible Neo-Hookean material with J=1."""
+        F = deformation_gradient
+        I = np.eye(3)
+
+        C = TensorOperations.right_cauchy_green(F)
+        C_inv = TensorOperations.inverse(C)
+
+        # TODO: generalize with correct formula
+        S_pk2 = 2 * self.c * (I - C_inv)
+
+        return S_pk2
+
     def compute_strain_energy(self, deformation_gradient):
         """Compute strain energy density."""
         F = deformation_gradient
-        if isinstance(F, (int, float)):
-            # W = c/2 * (F² + 1/F² - 2) for incompressible Neo-Hookean
-            energy = 0.5 * self.c * (F*F + 1.0/(F*F) - 2.0)
-        else:
-            energy = 0.5 * self.c  # Placeholder
+        energy = 1 # PLACEHOLDER. TODO: Implement properly
         
         return energy
     
@@ -166,6 +232,8 @@ class FungExponentialModel(ConstitutiveModel):
     ISOTROPY_TYPE = IsotropyType.ANISOTROPIC
     
     def __init__(self, parameters):
+        # TODO: Consider restructuring how anisotropic fibers are handled
+        # Should it be a parameter in self?
         super().__init__(parameters)
         self.c1 = parameters['c1']  # Material constant in Pa
         self.c2 = parameters['c2']  # Dimensionless exponential parameter
@@ -182,39 +250,76 @@ class FungExponentialModel(ConstitutiveModel):
         if self.parameters['c2'] <= 0:
             raise ValueError("Fung parameter 'c2' must be positive")
     
-    def compute_stress(self, deformation_gradient, mass_density=1.0):
-        """Compute Cauchy stress for Fung exponential material."""
+    def compute_PK2_stress(self, deformation_gradient: np.ndarray) -> np.ndarray:
+        """Compute deviatoric 2nd Piola-Kirchhoff stress for Fung model.
+        
+        Formula:
+            S_pk2 = c1 · c2 · E_f · exp(c2 · E_f²) · (a0 ⊗ a0)
+        
+        where:
+            E_f = a0 · E · a0  (scalar fiber strain)
+            a0 = fiber direction in reference configuration
+            E = 0.5 (C - I)   (Green-Lagrange strain tensor)
+        
+        Args:
+            deformation_gradient: F (3×3)
+            
+        Returns:
+            S (3×3) - 2nd Piola-Kirchhoff stress tensor (Pa)
+        """
+        # TODO: revisit variable names for clarity        
         F = deformation_gradient
+        a0 = self.fiber_orientation
         
-        if isinstance(F, (int, float)):
-            # Simplified Fung stress (would need proper fiber direction in 3D)
-            strain = 0.5 * (F*F - 1.0)  # Green strain
-            exponential_term = math.exp(self.c2 * strain * strain)
-            stress = self.c1 * mass_density * strain * exponential_term
-        else:
-            # Placeholder for tensor implementation
-            stress = self.c1 * mass_density * 1.2
+        # Compute fiber strain
+        E_f = self.compute_fiber_strain(F, a0)
         
-        return stress
+        # Exponential term
+        exp_term = np.exp(self.c2 * E_f**2)
+        
+        # Stress coefficient
+        coeff = self.c1 * self.c2 * E_f * exp_term
+        
+        # Structural tensor: a0 ⊗ a0 (dyadic product)
+        A = np.outer(a0, a0)
+        
+        # 2nd PK stress: S = coeff · (a0 ⊗ a0)
+        S_pk2 = coeff * A
+        
+        return S_pk2
     
-    def compute_strain_energy(self, deformation_gradient):
-        """Compute strain energy density."""
+    def compute_strain_energy(self, deformation_gradient: np.ndarray) -> float:
+        """Compute strain energy density.
+        
+        Formula:
+            Ψ = (c1 / 2) · [exp(c2 · E_f²) - 1]
+        
+        Args:
+            deformation_gradient: F (3×3)
+            
+        Returns:
+            Strain energy density (Pa or J/m³)
+        """        
         F = deformation_gradient
+        a0 = self.fiber_orientation
         
-        if isinstance(F, (int, float)):
-            strain = 0.5 * (F*F - 1.0)
-            energy = (self.c1 / (2.0 * self.c2)) * (math.exp(self.c2 * strain * strain) - 1.0)
-        else:
-            energy = self.c1 / (2.0 * self.c2)  # Placeholder
+        # Compute fiber strain
+        E_f = self.compute_fiber_strain(F, a0)
         
-        return energy
+        # Strain energy
+        energy = (self.c1 / 2.0) * (np.exp(self.c2 * E_f**2) - 1.0)
+        
+        return float(energy)
     
-    def __str__(self):
-        if self.fiber_orientation is not None:
-            angle_deg = math.degrees(self.fiber_orientation)
-            return f"FungExponential(c1={self.c1:.1f} Pa, c2={self.c2:.1f}, anisotropic, θ={angle_deg:.1f}°)"
-        else:
-            return f"FungExponential(c1={self.c1:.1f} Pa, c2={self.c2:.1f}, anisotropic, θ=not set)"
+    def __str__(self) -> str:
+        """String representation showing parameters in Pa."""
+        model_str = f"FungExponential(c1={self.c1:.1f} Pa, c2={self.c2:.2f}, {self.ISOTROPY_TYPE.value}"
+        
+        if self.fiber_angle_degrees is not None:
+            model_str += f", fiber={self.fiber_angle_degrees:.1f}°"
+        
+        model_str += ")"
+        return model_str
 
 
 class HolzapfelOgdenModel(ConstitutiveModel):
@@ -256,9 +361,9 @@ class HolzapfelOgdenModel(ConstitutiveModel):
         # Placeholder implementation
         return self.c
     
-    def __str__(self):
-        if self.fiber_orientation is not None:
-            angle_deg = math.degrees(self.fiber_orientation)
-            return f"HolzapfelOgden(c={self.c:.1f} Pa, k1={self.k1:.1f} Pa, k2={self.k2:.1f}, anisotropic, θ={angle_deg:.1f}°)"
-        else:
-            return f"HolzapfelOgden(c={self.c:.1f} Pa, k1={self.k1:.1f} Pa, k2={self.k2:.1f}, anisotropic, θ=not set)"
+    # def __str__(self):
+    #     if self.fiber_orientation is not None:
+    #         angle_deg = math.degrees(self.fiber_orientation)
+    #         return f"HolzapfelOgden(c={self.c:.1f} Pa, k1={self.k1:.1f} Pa, k2={self.k2:.1f}, anisotropic, θ={angle_deg:.1f}°)"
+    #     else:
+    #         return f"HolzapfelOgden(c={self.c:.1f} Pa, k1={self.k1:.1f} Pa, k2={self.k2:.1f}, anisotropic, θ=not set)"

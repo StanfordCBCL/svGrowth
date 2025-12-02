@@ -38,7 +38,13 @@ class MechanicsContext(ABC):
 
 
 class ConstituentMechanicsContext(MechanicsContext):
-    """Concrete implementation for constituent-level stress access."""
+    """Concrete implementation for constituent-level mechanics access.
+    
+    Provides Mechanics with access to:
+    - Layer deformation gradients F(t)
+    - Constituent properties (deposition stretch, constitutive model)
+    - Constituent histories (for stress integration)
+    """
     
     def __init__(self, constituent):
         """Initialize with constituent reference."""
@@ -88,6 +94,100 @@ class ConstituentMechanicsContext(MechanicsContext):
             )
         
         return self.constituent.rhoR_alpha_history[timestep]
+    
+    # =================================================================
+    # CONSTITUENT-SPECIFIC PROPERTY ACCESS (for F_α computation)
+    # =================================================================
+    
+    def get_deposition_stretch(self) -> np.ndarray:
+        """Get constituent deposition stretch tensor G_α.
+        
+        Returns:
+            3×3 deposition stretch tensor
+            
+        Raises:
+            MechanicsDataNotAvailableError: If deposition stretch not set
+        """        
+        if self.constituent.deposition_stretch is None:
+            raise MechanicsDataNotAvailableError(
+                f"Constituent '{self.constituent.name}' deposition_stretch is None"
+            )
+        
+        return self.constituent.deposition_stretch
+    
+    def get_constitutive_model(self):
+        """Get constitutive model for stress computation.
+        
+        Returns:
+            ConstitutiveModel instance
+            
+        Raises:
+            MechanicsDataNotAvailableError: If constitutive model not set
+        """        
+        if self.constituent.constitutive_model is None:
+            raise MechanicsDataNotAvailableError(
+                f"Constituent '{self.constituent.name}' constitutive_model is None"
+            )
+        
+        return self.constituent.constitutive_model
+    
+    def get_homeostatic_density(self) -> float:
+        """Get homeostatic mass density ρ_h.
+        
+        Returns:
+            Homeostatic density (kg/m³)
+            
+        Raises:
+            MechanicsDataNotAvailableError: If not set
+        """        
+        return self.constituent.homeostatic_referential_density
+    
+    def get_tau_min(self) -> int:
+        """Get earliest deposition timestep.
+        
+        Returns:
+            Minimum deposition time index
+        """
+        # TODO: remove this check?
+        if not hasattr(self.constituent, 'tau_min'):
+            return 0  # Default
+        
+        return self.constituent.tau_min
+    
+    def get_production_rate(self, timestep: int) -> float:
+        """Get production rate mR at timestep.
+        
+        Args:
+            timestep: Timestep index
+            
+        Returns:
+            Production rate (kg/(m³·day))
+        """       
+        if not (0 <= timestep < len(self.constituent.mR_alpha_history)):
+            raise MechanicsDataNotAvailableError(
+                f"Timestep {timestep} out of range for production rate"
+            )
+        
+        return self.constituent.mR_alpha_history[timestep]
+    
+    def get_survival_values(self, timestep: int) -> list:
+        """Get survival function values at timestep.
+        
+        Returns:
+            List [q(s, τ_min), ..., q(s, s)]
+        """
+        #TODO: consider interaction of this check with kinetics vs no-kinetics
+        if not hasattr(self.constituent, 'survival_history'):
+            raise MechanicsDataNotAvailableError(
+                f"Constituent has no survival_history"
+            )
+        
+        if not (0 <= timestep < len(self.constituent.survival_history)):
+            raise MechanicsDataNotAvailableError(
+                f"Timestep {timestep} out of range for survival"
+            )
+        
+        return self.constituent.survival_history[timestep]
 
 
 class LayerMechanicsContext(MechanicsContext):

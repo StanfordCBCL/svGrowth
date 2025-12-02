@@ -46,7 +46,7 @@ layers:
       lambda_z_h: 1.0            # dimensionless (homeostatic axial stretch)
     
     # --------------------------------------------------------------------------
-    # Constituents
+    # Constituents (Dictionary format - matches your code!)
     # --------------------------------------------------------------------------
     constituents:
       
@@ -82,6 +82,7 @@ layers:
           lambda_0: 0.4          # dimensionless (min stretch for activation)
           lambda_m: 1.1          # dimensionless (optimal stretch)
           CB: 0.8326             # dimensionless (basal calcium)
+          CS: 0.4163
         
         kinetics:
           production:
@@ -99,74 +100,90 @@ layers:
                 intramural_stress: 1.0
       
       # ------------------------------------------------------------------------
-      # COLLAGEN (Multi-Fiber Family)
+      # COLLAGEN - CIRCUMFERENTIAL FAMILY
       # ------------------------------------------------------------------------
-      collagen:
-        constituent_type: "multi_fiber_family"
+      collagen_circumferential:
+        mass_fraction: 0.22    
+        deposition_stretch: 1.08
         
-        # Shared properties (kinetics same for all fiber families)
-        shared_properties:
-          total_mass_fraction: 0.22
-          deposition_stretch: 1.08
+        constitutive_model:
+          type: "fung_exponential"
+          fiber_orientation: 90.0  # degrees (circumferential)
+          parameters:
+            c1: 672.5            # kPa
+            c2: 22.0             # dimensionless
+        
+        kinetics:
+          production:
+            stimulus_function_form: "linear"
+            gain_params:
+              intramural_stress: 1.0
+              wss: -0.5
           
-          kinetics:
-            production:
-              stimulus_function_form: "linear"
+          degradation:
+            survival_function_form: "exponential"
+            deg_rate:
+              type: "quadratic"
+              k_alpha_h: 0.1     # 1/day (homeostatic degradation rate)
               gain_params:
                 intramural_stress: 1.0
-                wss: -0.5
-            
-            degradation:
-              survival_function_form: "exponential"
-              deg_rate:
-                type: "quadratic"
-                k_alpha_h: 0.1   # 1/day (homeostatic degradation rate)
-                gain_params:
-                  intramural_stress: 1.0
-        
-        # Individual fiber families (different mechanical properties)
-        fiber_families:
-          
-          circumferential:
-            mass_fraction_ratio: 0.6  # 60% of total collagen
-            constitutive_model:
-              type: "fung_exponential"
-              isotropy: "anisotropic"
-              fiber_orientation: 90.0  # degrees (circumferential)
-              parameters:
-                c1: 672.5        # kPa
-                c2: 22.0         # dimensionless
-          
-          axial:
-            mass_fraction_ratio: 0.4  # 40% of total collagen
-            constitutive_model:
-              type: "fung_exponential"
-              isotropy: "anisotropic"
-              fiber_orientation: 0.0  # degrees (axial)
-              parameters:
-                c1: 500.0        # kPa
-                c2: 18.0         # dimensionless
-          
-          # Optional: Additional diagonal families
-          # diagonal_1:
-          #   mass_fraction_ratio: 0.25  # 25% of total collagen
-          #   constitutive_model:
-          #     type: "fung_exponential"
-          #     isotropy: "anisotropic"
-          #     fiber_orientation: 45.0  # degrees
-          #     parameters:
-          #       c1: 400.0      # kPa
-          #       c2: 15.0       # dimensionless
-          # 
-          # diagonal_2:
-          #   mass_fraction_ratio: 0.25  # 25% of total collagen
-          #   constitutive_model:
-          #     type: "fung_exponential"
-          #     isotropy: "anisotropic"
-          #     fiber_orientation: -45.0  # degrees
-          #     parameters:
-          #       c1: 400.0      # kPa
-          #       c2: 15.0       # dimensionless
+
+      # ------------------------------------------------------------------------
+      # OPTIONAL: COLLAGEN - DIAGONAL FAMILIES (uncomment if needed)
+      # ------------------------------------------------------------------------
+      # - name: "collagen_diagonal_1"
+      #   mass_fraction: 0.055   # 25% of 0.22 total collagen
+      #   deposition_stretch: 1.08
+      #   
+      #   constitutive_model:
+      #     type: "fung_exponential"
+      #     isotropy: "anisotropic"
+      #     fiber_orientation: 45.0  # degrees
+      #     parameters:
+      #       c1: 400.0          # kPa
+      #       c2: 15.0           # dimensionless
+      #   
+      #   kinetics:
+      #     production:
+      #       stimulus_function_form: "linear"
+      #       gain_params:
+      #         intramural_stress: 1.0
+      #         wss: -0.5
+      #     
+      #     degradation:
+      #       survival_function_form: "exponential"
+      #       deg_rate:
+      #         type: "quadratic"
+      #         k_alpha_h: 0.1   # 1/day
+      #         gain_params:
+      #           intramural_stress: 1.0
+      # 
+      # - name: "collagen_diagonal_2"
+      #   mass_fraction: 0.055   # 25% of 0.22 total collagen
+      #   deposition_stretch: 1.08
+      #   
+      #   constitutive_model:
+      #     type: "fung_exponential"
+      #     isotropy: "anisotropic"
+      #     fiber_orientation: -45.0  # degrees
+      #     parameters:
+      #       c1: 400.0          # kPa
+      #       c2: 15.0           # dimensionless
+      #   
+      #   kinetics:
+      #     production:
+      #       stimulus_function_form: "linear"
+      #       gain_params:
+      #         intramural_stress: 1.0
+      #         wss: -0.5
+      #     
+      #     degradation:
+      #       survival_function_form: "exponential"
+      #       deg_rate:
+      #         type: "quadratic"
+      #         k_alpha_h: 0.1   # 1/day
+      #         gain_params:
+      #           intramural_stress: 1.0
 
   # ----------------------------------------------------------------------------
   # Future: Layer 2 - Adventitia (when implementing multi-layer models)
@@ -186,5 +203,5 @@ layers:
   #     lambda_z_h: 1.0
   #   
   #   constituents:
-  #     collagen_adventitial:
+  #     - name: "collagen_adventitial"
   #       # ... adventitial collagen properties ...

@@ -285,6 +285,7 @@ class ThinWallKinematics(DeformationKinematics):
             Lagrange multiplier tensor (3×3 diagonal)
         """
         # Extract radial stress (index 0 in cylindrical coords)
+        # TODO: refactor this tight coupling to sigma[0,0]
         sigma_r = sigma[0, 0]
         
         # Lagrange multiplier is uniform hydrostatic stress
@@ -524,8 +525,10 @@ class ThinWallKinematics(DeformationKinematics):
             raise ValueError(f"Blood viscosity must be positive, got {blood_viscosity}")
         
         # Poiseuille WSS formula
-        wss = (4.0 * blood_viscosity * flow_rate) / (math.pi * inner_radius**3)
-        
+        # TODO: unlcear why blood viscosity not used in Latorre 2018. Rethink units.
+        # wss = (4.0 * blood_viscosity * flow_rate) / (math.pi * inner_radius**3)
+        wss = flow_rate / inner_radius**3
+
         return wss
 
     def compute_volume_ratio(

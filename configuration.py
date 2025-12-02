@@ -27,11 +27,13 @@ class Configuration:
             layer = Layer.from_parameters(layer_data)
             config.add_layer(layer)
         
-        # Add external support layers if present
-        # if 'external_supports' in params:
-        #    config._initialize_support_layers(params['external_supports'])
-        
-        print(f"Configuration initialized with {len(config.layers)} layers")
+        # Compute homeostatic stress (direct method - no simulation params needed)
+        # TODO: integrate this into Layer.from_parameters.
+        print("\nComputing homeostatic stresses...")
+        for layer in config.layers:
+            layer.compute_homeostatic_stress_direct()
+    
+        print(f"\nConfiguration initialized with {len(config.layers)} layers")
         return config
 
     @staticmethod
@@ -52,49 +54,6 @@ class Configuration:
         layer_data = params['layer']
         layer = Layer.from_parameters(layer_data, params)
         self.add_layer(layer)
-        
-        # Add external support layers if present
-        if 'external_supports' in params:
-            self._initialize_support_layers(params['external_supports'])
-    
-    def _initialize_support_layers(self, support_params):
-        """Initialize external support layers."""
-        for support_name, properties in support_params.items():
-            support_layer = Layer(support_name, "synthetic", properties)
-            
-            if 'constituents' in properties:
-                for constituent_name, constituent_props in properties['constituents'].items():
-                    constituent = Constituent.from_parameters(constituent_name, constituent_props)
-                    support_layer.add_constituent(constituent)
-            
-            self.add_layer(support_layer)
-
-    def advance_time(self, current_time, dt):
-        """Advance configuration one timestep."""
-        print(f"Advancing configuration by dt={dt}")
-        current_time += dt
-
-        # 1. Update all constituents (bottom-up kinetics)
-        self._update_all_constituents(dt)
-        
-        # 2. Update all layers (mechanical state from constituents)
-        self._update_all_layers(dt)
-        
-        # 3. Handle layer interactions and constraints
-        self._enforce_layer_interactions()
-        
-        # 4. Update global configuration properties
-        self._update_global_state()
-    
-    def _update_all_constituents(self, dt):
-        """Update kinetics for all constituents in all layers."""
-        for layer in self.layers:
-            layer.update_constituent_kinetics(dt)
-    
-    def _update_all_layers(self, dt):
-        """Update mechanical state for all layers."""
-        for layer in self.layers:
-            layer.update_mechanical_state(dt)
     
     def _enforce_layer_interactions(self):
         """Enforce constraints between layers (contact, compatibility, etc.)."""
@@ -104,21 +63,10 @@ class Configuration:
             outer_layer = self.layers[i + 1]
             
             # Enforce geometric compatibility
-            outer_layer.enforce_contact_with(inner_layer)
-    
-    def _update_global_state(self):
-        """Update global configuration properties from layer states."""
-        self.total_mass = sum(layer.get_total_mass() for layer in self.layers)
-        # Update other global properties as needed    
+            outer_layer.enforce_contact_with(inner_layer) 
 
     def add_layer(self, layer):
         self.layers.append(layer)
-
-    def get_vessel_geometry(self):
-        """Get geometry from the vessel layer."""
-        for layer in self.layers:
-            if layer.layer_type == "biological":
-                return layer.get_geometry()
 
     def guess_all_rhoR_alpha(self, target_timestep, guess_method="from_previous_timestep"):
         """Guess mass densities for all constituents in all layers using specified method."""
@@ -152,15 +100,15 @@ class Configuration:
         for layer in self.layers:
             layer.guess_geometry(timestep, guess_method)
 
-    def compute_all_stress(self, timestep: int, dt: float, 
+    def compute_all_stress(self, target_timestep: int, dt: float, 
                       integration_method: str,
                       survival_function_computation: str) -> None:
         """Compute stresses for all layers."""
-        print(f"Computing stress for all layers at timestep {timestep}")
+        print(f"Computing stress for all layers at target timestep {target_timestep}")
         
         for layer in self.layers:
             layer.compute_all_stress(
-                timestep,
+                target_timestep,
                 dt,
                 integration_method,
                 survival_function_computation

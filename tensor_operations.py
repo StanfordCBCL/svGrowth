@@ -13,6 +13,11 @@ class TensorOperations:
     """
 
     @staticmethod
+    def inverse(A):
+        """Compute inverse of 3x3 matrix."""
+        return np.linalg.inv(A)
+    
+    @staticmethod
     def trace(A: np.ndarray) -> float:
         """Compute trace: tr(A) = sum of diagonal elements."""
         return float(np.trace(A))

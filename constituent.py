@@ -1,11 +1,13 @@
 import math
 import warnings
+import numpy as np
 from typing import List, Dict, Any, Optional
-from solid_mechanics import ConstitutiveModel 
 from abc import ABC, abstractmethod
 from kinetics import Kinetics  
 from kinetics_interface import ConstituentKineticsContext
-from solid_mechanics import ConstitutiveModel
+from constitutive_laws import ConstitutiveModel
+import layer
+from mechanics import Mechanics
 from mechanics_interface import ConstituentMechanicsContext
 
 # Forward reference for Layer (avoids circular import)
@@ -22,28 +24,40 @@ class Constituent(ABC):
         self.kinetics: Optional[Kinetics] = None
         self.constitutive_model: Optional[ConstitutiveModel] = None # TODO: consider making this mandatory for SingleConstituent. Never initialized for MultiFiberFamilyConstituent.
         
-        # Homeostatic properties
         self.homeostatic_referential_density: Optional[float] = None
+        self.deposition_stretch_scalar: Optional[float] = None
+        self.deposition_stretch: Optional[np.ndarray] = None
 
+        # Active stress properties (optional - only for contractile constituents)
+        self.is_active = False
+        self.active_properties = None
+        
+        # Active stress histories (only allocated if is_active=True)
+        self.active_radius_history = []  # [a_act(0), a_act(1), ...]
+        self.active_survival_history = []  # [[q_act(0,0)], [q_act(1,0), q_act(1,1)], ...]
+        self.active_stress_history = []  # [σ_act(0), σ_act(1), ...] (scalars, circumferential only)
+    
         # Referential mass density evolution (rhoR_alpha) - timestep-indexed history
-        self.q_history = []  # List of survival function values over time (for each cohort)
         self.rhoR_alpha_history = []  # List of mass densities over time
-        self.sigma_hat_history = []  # List of constituent-based partial stress over time TODO: perhaps make temporary array?
-        self.stress_history = []  # List of stress over time
-        self.wss_history = []  # List of strain energy density over time
         self.survival_history = [] # List of survival fractions over time (for each cohort)
         self.k_alpha_history = []  # List of degradation rates of survival function over time
         self.mR_alpha_history = []  # List of production rates over time
 
-    @classmethod
-    def from_parameters(cls, name, properties):
+        self.F_alpha_history: List[List[np.ndarray]] = []
+        self.sigma_hat_history: List[List[np.ndarray]] = []  # List of constituent-based partial stress over time TODO: perhaps make temporary array?
+        self.stress_history: List[np.ndarray] = []
+
+        self.tau_min = 0
+
+    @staticmethod 
+    def from_parameters(name: str, properties: Dict[str, Any], layer: 'Layer' = None) -> 'Constituent':
         """Factory method to create appropriate constituent type."""
         constituent_type = properties.get('constituent_type', 'single')
         
         if constituent_type == 'multi_fiber_family':
-            return MultiFiberFamilyConstituent.from_parameters(name, properties)
+            return MultiFiberFamilyConstituent.from_parameters(name, properties, layer)
         else:
-            return SingleConstituent.from_parameters(name, properties)
+            return SingleConstituent.from_parameters(name, properties, layer)
     
     # UTILITY/CONVENIENCE METHODS - Same implementation for all constituents
     def get_rhoR_alpha(self, timestep):
@@ -88,25 +102,61 @@ class Constituent(ABC):
         """Compute referential mass density of constituent for target timestep."""
         pass
 
+    @abstractmethod
+    def compute_sigma_alpha(self, target_timestep: int, dt: float, 
+                       integration_method: str,
+                       survival_function_computation: str) -> np.ndarray:
+        """Compute constituent stress via heredity integral.
+    
+        σ_α(s) = ∫₀ˢ [mR(τ)·q(s,τ)/ρ_h] · σ̂_α(s,τ) dτ
+    
+        where:
+            σ̂_α(s,τ) - stress from cohort deposited at τ, evaluated at s
+            mR(τ) - production rate at deposition time τ
+            q(s,τ) - survival function (fraction surviving from τ to s)
+            ρ_h - homeostatic mass density
+    
+        Returns:
+            3×3 stress tensor in Pa
+        """
+        pass
+
 class SingleConstituent(Constituent):
     """Single constituent (elastin, muscle, etc.)."""
     
     def __init__(self, name):
         super().__init__(name)
         self.params = {}
-        self.tau_min = 0
+        self.mechanics = Mechanics()
     
     @classmethod
-    def from_parameters(cls, name, properties):
+    def from_parameters(cls, name: str, properties: Dict[str, Any], layer: 'Layer' = None) -> 'SingleConstituent':
         """Create and fully initialize single constituent from parameters."""
         print(f"    Initializing single constituent: {name}")
         
         constituent = cls(name)
+
+        # Set layer reference immediately if provided
+        if layer is not None:
+            constituent.layer = layer
         
         # Initialize homeostatic mass density (t=0)
         constituent.homeostatic_referential_density = properties['mass_fraction'] * 1050.0
         constituent.rhoR_alpha_history.append(constituent.homeostatic_referential_density)
         print(f"        Homeostatic mass density (rhoR_alpha at t=0): {constituent.homeostatic_referential_density:.2f} kg/m³")
+
+        # Initialize constitutive model
+        if 'constitutive_model' in properties:
+            constituent.constitutive_model = ConstitutiveModel.from_parameters(properties['constitutive_model'])
+            print(f"        Constitutive model: {constituent.constitutive_model}")
+        
+        # Initialize active properties if present
+        if 'active_properties' in properties:
+            constituent._initialize_active_properties(properties['active_properties'])
+
+        # Initialize deposition stretch and deformation gradient
+        deposition_stretch_input = properties['deposition_stretch']
+        constituent._initialize_deposition_stretch(deposition_stretch_input)
 
         # Initialize kinetics
         if 'kinetics' in properties:
@@ -116,21 +166,95 @@ class SingleConstituent(Constituent):
             print(f"        No kinetics (elastin-like constituent)")
         
         # TODO: Set tau_min based on constituent type
-        
-        # Initialize constitutive model
-        if 'constitutive_model' in properties:
-            constituent.constitutive_model = ConstitutiveModel.from_parameters(properties['constitutive_model'])
-            print(f"        Constitutive model: {constituent.constitutive_model}")
-        
-        # Initialize active properties if present
-        if 'active_properties' in properties:
-            constituent._initialize_active_properties(properties['active_properties'])
-        
+
         # Store all parameters
         constituent.params = properties.copy()
         
         return constituent
+
+    def _initialize_deposition_stretch(self, deposition_stretch_input) -> None:
+        """Initialize deposition stretch tensor G_α from YAML input.
+        
+        Supports three input formats:
+        1. Scalar (isotropic): deposition_stretch: 1.40
+        → G_α = 1.40 · I
+        
+        2. List (anisotropic diagonal): deposition_stretch: [1.2, 1.5, 1.1]
+        → G_α = diag(1.2, 1.5, 1.1)
+        
+        3. Dict (full tensor - future): deposition_stretch: {type: "tensor", values: [[...]]}
+        → G_α = full 3×3 tensor
+        
+        Args:
+            deposition_stretch_input: Value from YAML (scalar, list, or dict)
+        
+        Raises:
+            ValueError: If input format is invalid
+        """        
+        # Only accept scalar input
+        if not isinstance(deposition_stretch_input, (int, float)):
+            raise ValueError(
+                f"deposition_stretch must be a scalar, got {type(deposition_stretch_input)}"
+            )
+        
+        self.deposition_stretch_scalar = float(deposition_stretch_input)
+
+        has_fiber = (
+            self.constitutive_model is not None and 
+            hasattr(self.constitutive_model, 'fiber_angle_degrees') and
+            self.constitutive_model.fiber_angle_degrees is not None
+        )
     
+        if has_fiber:
+            # MODE 2: FIBER-ONLY DEPOSITION
+            fiber_angle = self.constitutive_model.fiber_angle_degrees
+            
+            # Determine fiber direction component based on angle
+            # TODO: Create mapping class in deformation kinematics to be used in the code
+            if abs(fiber_angle - 0.0) < 1e-6:
+                # 0° = Axial (z-direction, index 2)
+                fiber_component = 2
+                coord_name = 'z (axial)'
+                
+            elif abs(fiber_angle - 90.0) < 1e-6:
+                # 90° = Circumferential (θ-direction, index 1)
+                fiber_component = 1
+                coord_name = 'θ (circumferential)'
+                
+            elif abs(fiber_angle - 45.0) < 1e-6:
+                # 45° = Helical (not yet implemented)
+                raise NotImplementedError(
+                    f"Helical fiber deposition (45°) not yet implemented. "
+                    f"Only axial (0°) and circumferential (90°) are supported."
+                )
+                
+            else:
+                # General angle - not yet implemented
+                raise NotImplementedError(
+                    f"Fiber deposition at angle {fiber_angle:.1f}° not yet implemented. "
+                    f"Only axial (0°) and circumferential (90°) are supported. "
+                    f"For helical (45°), implementation is needed."
+                )
+            
+            # Create tensor with zeros except fiber direction
+            self.deposition_stretch = np.zeros((3, 3))
+            self.deposition_stretch[fiber_component, fiber_component] = self.deposition_stretch_scalar
+            
+            print(f"        Deposition stretch: λ_dep = {self.deposition_stretch_scalar:.2f} (fiber-only)")
+            print(f"        Fiber angle: {fiber_angle:.1f}° → {coord_name}")
+            print(f"        G_α = diag({self.deposition_stretch[0,0]:.2f}, "
+                f"{self.deposition_stretch[1,1]:.2f}, {self.deposition_stretch[2,2]:.2f})")
+            
+        else:
+            # MODE 1: ISOTROPIC 3D DEPOSITION
+            # Incompressibility: λ_r · λ_θ · λ_z = 1
+            # If λ_θ = λ_z = λ, then λ_r = 1/λ²
+            lambda_r = 1.0 / (self.deposition_stretch_scalar ** 2)
+            self.deposition_stretch = np.diag([lambda_r, self.deposition_stretch_scalar, self.deposition_stretch_scalar])
+            
+            print(f"        Deposition stretch: λ_dep = {self.deposition_stretch_scalar:.2f} (isotropic 3D)")
+            print(f"        G_α = diag({lambda_r:.4f}, {self.deposition_stretch_scalar:.2f}, {self.deposition_stretch_scalar:.2f})")
+
     def _initialize_homeostatic_kinetics(self) -> None:
         """Initialize kinetics histories at t=0 (homeostatic state).
         
@@ -163,13 +287,80 @@ class SingleConstituent(Constituent):
         print(f"          mR_alpha(0) = {mR_alpha_h:.6f} kg/(m³·day)")
         print(f"          q(0,0) = 1.0")
 
-    def _initialize_active_properties(self, active_props):
-        """Initialize active properties."""
-        print("        Active properties initialized")
+    def _initialize_active_properties(self, active_props: Dict[str, float]) -> None:
+        """Initialize active properties for contractile constituents (e.g., SMCs).
+        
+        Args:
+            active_props: Dictionary with:
+                - T_act_h: Maximum active stress (kPa)
+                - k_act: Activation rate constant (1/day)
+                - lambda_0: Minimum stretch for activation (-)
+                - lambda_m: Optimal stretch for activation (-)
+                - CB: Basal calcium concentration (-)
+                - CS: Shear stress sensitivity (optional, default=0)
+        """
+        print("        Active properties:")
+        
         self.is_active = True
-        self.T_act_h = active_props['T_act_h'] * 1000.0  # kPa -> Pa
-        # ... other active properties
-    
+        
+        # Unit conversions
+        kPa_to_Pa = 1.0e3
+        
+        # Store active properties
+        self.active_properties = {
+            'T_act': active_props['T_act_h'] * kPa_to_Pa,  # Convert to Pa
+            'k_act': active_props['k_act'],                # 1/day
+            'lambda_0': active_props['lambda_0'],          # Dimensionless
+            'lambda_m': active_props['lambda_m'],          # Dimensionless
+            'CB': active_props['CB'],                      # Dimensionless
+            'CS': active_props['CS']                       # Dimensionless
+        }
+        
+        # Initialize active histories at t=0
+        # At homeostasis: a_act(0) = a_h (homeostatic inner radius)
+        a_h = self.layer.get_homeostatic_inner_radius()
+        self.active_radius_history.append(a_h)
+        
+        # Active survival: q_act(0,0) = 1.0
+        self.active_survival_history.append([1.0])
+        
+        # Active stress at homeostasis (compute using homeostatic conditions)
+        sigma_act_h = self._compute_active_stress_at_homeostasis()
+        self.active_stress_history.append(sigma_act_h)
+        
+        # Print summary
+        print(f"          T_act = {active_props['T_act_h']:.1f} kPa")
+        print(f"          k_act = {self.active_properties['k_act']:.6f} 1/day")
+        print(f"          λ_0 = {self.active_properties['lambda_0']:.2f}, λ_m = {self.active_properties['lambda_m']:.2f}")
+        print(f"          CB = {self.active_properties['CB']:.4f}")
+        print(f"          a_act(0) = {a_h*1000:.4f} mm")
+        print(f"          σ_act(0) = {sigma_act_h/1000:.2f} kPa")
+
+    def _compute_active_stress_at_homeostasis(self) -> float:
+        """Compute homeostatic active stress (at t=0).
+        
+        At homeostasis:
+        - a = a_h, a_act = a_h → λ_act = 1.0
+        - τ_w = τ_w_h → C = CB
+        
+        Returns:
+            σ_act_h (Pa) - circumferential active stress
+        """
+        # At homeostasis
+        lambda_act = 1.0  # a_h / a_act_h = 1.0
+        C = self.active_properties['CB']  # No shear deviation at homeostasis
+        
+        # Parabolic activation function
+        lm = self.active_properties['lambda_m']
+        l0 = self.active_properties['lambda_0']
+        parab_act = 1.0 - ((lm - lambda_act) / (lm - l0))**2
+        
+        # Active stress
+        T_act = self.active_properties['T_act']
+        sigma_act_h = T_act * (1.0 - np.exp(-C**2)) * lambda_act * parab_act
+        
+        return sigma_act_h
+        
     def get_mass_density(self, current_timestep):
         """Get current mass density (convenience method)."""
         return self.get_rhoR_alpha(current_timestep)
@@ -277,7 +468,7 @@ class SingleConstituent(Constituent):
             integration_method=integration_method,
             survival_function_computation=survival_function_computation
         )
-        self.q_history.append(survival_values)
+        self.survival_history.append(survival_values)
 
         # Step 4: Compute heredity integral (just integrate mR × q!)
         rhoR_alpha = self.kinetics.compute_heredity_integral(
@@ -293,6 +484,140 @@ class SingleConstituent(Constituent):
 
         return self.get_rhoR_alpha(target_timestep)
 
+    def compute_active_radius(
+        self,
+        target_timestep: int,
+        dt: float,
+        integration_method: str
+    ) -> float:
+        """Compute active radius via heredity integral.
+        
+        a_act(s) = ∫₀ˢ k_act · a(τ) · q_act(s,τ) dτ
+        
+        where:
+            a(τ) - layer inner radius at deposition time τ
+            q_act(s,τ) = exp(-k_act·(s-τ)) - active material survival
+            k_act - activation rate constant
+        
+        Args:
+            target_timestep: Current time s
+            dt: Time step size (days)
+            integration_method: Integration method ('simpson' or 'trapezoidal')
+            
+        Returns:
+            Active radius a_act (m)
+        """
+        if not self.is_active:
+            raise RuntimeError(f"Constituent '{self.name}' is not active")
+        
+        if target_timestep == 0:
+            # Already initialized in _initialize_active_properties
+            return self.active_radius_history[0]
+        
+        # STEP 1: Compute active survival function q_act(s,τ) = exp(-k_act·(s-τ))
+        # This is an EXPONENTIAL survival with CONSTANT degradation rate
+        k_act = self.active_properties['k_act']
+        
+        # Build constant k_act history [k_act, k_act, ..., k_act]
+        k_act_history = [k_act] * (target_timestep + 1)
+        
+        # Compute survival using exponential survival (reuse kinetics!)
+        from kinetics import ExponentialSurvival, ConstantDegradationRate
+        
+        deg_function = ConstantDegradationRate(k_act)
+        survival_function = ExponentialSurvival(deg_function)
+        
+        q_act_values = survival_function.compute_survival_function(
+            k_alpha_history=k_act_history,
+            tau_min=0,  # Active material starts at t=0
+            dt=dt,
+            current_timestep=target_timestep,
+            integration_method=integration_method,
+            survival_function_computation='backward'  # Use optimized method
+        )
+        
+        self.active_survival_history.append(q_act_values)
+        
+        # STEP 2: Build integrand: k_act · a(τ) · q_act(s,τ)
+        integrand = []
+        for tau in range(0, target_timestep + 1):
+            a_tau = self.layer.get_inner_radius(tau)
+            integrand.append(k_act * a_tau * q_act_values[tau])
+        
+        # STEP 3: Integrate
+        from integrators import IntegratorFactory
+        
+        n_points = len(integrand)
+        integrator = IntegratorFactory.create(
+            integration_method,
+            dt,
+            n_points - 1,  # Last index
+            0              # First index
+        )
+        
+        a_act = integrator.integrate(integrand)
+        
+        self.active_radius_history.append(a_act)
+        
+        return a_act
+
+    def compute_active_stress_component(
+        self,
+        target_timestep: int
+    ) -> float:
+        """Compute circumferential active stress σ̂_act.
+        
+        Formula (from Latorre 2018):
+            σ̂_act = T_act · [1 - exp(-C²)] · λ_act · parab_act
+        
+        where:
+            C = CB - CS·(τ_w/τ_w_h - 1) - vasomotor control
+            λ_act = a/a_act - active stretch
+            parab_act = 1 - [(λ_m - λ_act)/(λ_m - λ_0)]² - activation curve
+        
+        Args:
+            target_timestep: Current time s
+            
+        Returns:
+            σ̂_act (Pa) - circumferential active stress
+        """
+        if not self.is_active:
+            return 0.0
+        
+        # Get current geometry
+        a = self.layer.get_inner_radius(target_timestep)
+        a_act = self.active_radius_history[target_timestep]
+        
+        # Get wall shear stress (for vasomotor control)
+        tau_w = self.layer.wss_history[target_timestep]
+        tau_w_h = self.layer.homeostatic_wss
+        
+        # Active properties
+        T_act = self.active_properties['T_act']
+        CB = self.active_properties['CB']
+        CS = self.active_properties['CS']
+        lambda_m = self.active_properties['lambda_m']
+        lambda_0 = self.active_properties['lambda_0']
+        
+        # STEP 1: Vasomotor control
+        C = CB - CS * (tau_w / tau_w_h - 1.0)
+        
+        # STEP 2: Active stretch
+        lambda_act = a / a_act if a_act > 0 else 0.0
+        
+        # STEP 3: Parabolic activation function
+        # parab_act = 1 - [(λ_m - λ_act)/(λ_m - λ_0)]²
+        denominator = (lambda_m - lambda_0) if abs(lambda_m - lambda_0) > 1e-10 else 1.0
+        parab_act = 1.0 - ((lambda_m - lambda_act) / denominator)**2
+        
+        # Clip parab_act to [0, 1] (physical constraint)
+        parab_act = max(0.0, min(1.0, parab_act))
+        
+        # STEP 4: Active stress (hat quantity - per cohort)
+        sigma_hat_act = T_act * (1.0 - np.exp(-C**2)) * lambda_act * parab_act
+        
+        return sigma_hat_act
+
     def compute_sigma_alpha(self, target_timestep, dt, integration_method, survival_function_computation):
         """Compute referential mass density of constituent at target timestep.
 
@@ -306,48 +631,115 @@ class SingleConstituent(Constituent):
         
         if target_timestep == 0:
             raise ValueError("Cannot compute timestep 0: should be initialized with homeostatic value")
-        
+            
         # Pass necessary data from constituent to kinetics class
         context = ConstituentMechanicsContext(self)
 
-        # STEP 0: Compute survival function q(s, tau) for all cohorts
-        # TODO: This assums we already have k_alpha and mR_alpha. Figure out where to store q.
-        # Generally, q should be known as we first compute_rhoR_alpha before compute_sigma_alpha.
-        # This is computed on-the-fly from k_alpha_history, not stored
-        survival_values = self.kinetics.compute_survival_function(
-            k_alpha_history=self.k_alpha_history,
-            tau_min=self.tau_min,
-            dt=dt,
-            current_timestep=target_timestep,
-            integration_method=integration_method,
-            survival_function_computation=survival_function_computation
-        )
+        if self.kinetics is None:
+            print(f"        {self.name}: No kinetics - single cohort (τ=0)")
 
-         # Step 1: Compute sigma hat_alpha(s, τ) for all cohorts
-        sigma_hat_alpha = self.mechanics.compute_sigma_hat_alpha(
+            # STEP 1: Compute F_α for single cohort (τ=0)
+            F_alpha = self.mechanics.compute_F_alpha_for_cohort(
+                context, target_timestep, deposition_timestep=0
+            )
+            self.F_alpha_history.append([F_alpha]) # Store (as single-element list for consistency)
+
+            # STEP 2: Compute S_hat_α (PK2 stress) from constitutive model
+            S_hat_alpha = self.mechanics.compute_S_hat_alpha_for_cohort(
+                context, F_alpha
+            )
+
+            # STEP 3: Compute σ̂_α (Cauchy stress)
+            sigma_hat_alpha = self.mechanics.compute_sigma_hat_alpha_for_cohort(
+                F_alpha, S_hat_alpha
+            )
+            self.sigma_hat_history.append([sigma_hat_alpha])
+            
+            # STEP 4: No heredity integral - σ_α = (ρR_α/ρR) σ̂_α
+            # TODO: abstract with mass fraction?
+            rhoR_alpha = self.get_rhoR_alpha(target_timestep)
+            rhoR_h = self.layer.get_homeostatic_density()
+            sigma_alpha = (rhoR_alpha / rhoR_h) * sigma_hat_alpha
+            self.stress_history.append(sigma_alpha)
+            
+            return sigma_alpha
+
+        print(f"        {self.name}: With kinetics - multiple cohorts")
+        # STEP 1: Compute F_α(s,τ) for all cohorts τ ∈ [τ_min, s]
+        F_alpha_cohorts = self.mechanics.compute_F_alpha_for_all_cohorts(
+            context, target_timestep
+        )
+        self.F_alpha_history.append(F_alpha_cohorts)
+        
+        # STEP 2: Compute S_hat_α(s,τ) (PK2 stress) for all cohorts
+        S_hat_alpha_cohorts = self.mechanics.compute_S_hat_alpha_for_all_cohorts(
+            context, F_alpha_cohorts
+        )
+        
+        # STEP 3: Compute σ̂_α(s,τ) (Cauchy stress) for all cohorts
+        sigma_hat_alpha_cohorts = self.mechanics.compute_sigma_hat_alpha_for_all_cohorts(
+            F_alpha_cohorts, S_hat_alpha_cohorts
+        )
+        self.sigma_hat_history.append(sigma_hat_alpha_cohorts)
+        
+        # STEP 4: Integrate heredity integral: σ_α = ∫ (mR·q/ρ_h) · σ̂_α dτ
+        # TODO: consider passing whole survival history to integrate_constituent_stress
+        # to improve readability? 
+        survival_values = self.survival_history[target_timestep]
+        rho_h = self.layer.get_homeostatic_density()
+        
+        sigma_alpha = self.mechanics.integrate_constituent_stress(
+            sigma_hat_alpha_cohorts,
             self.mR_alpha_history,
             survival_values,
-            sigma_hat_alpha = self.sigma_hat_history,
-            tau_min=self.tau_min,
-            dt=dt,  
-            current_timestep=target_timestep,
-            integration_method=integration_method
+            rho_h,
+            self.tau_min,
+            target_timestep,
+            dt,
+            integration_method
         )
-        self.sigma_hat_alpha_history.append(sigma_hat_alpha)
 
-        # Step 2: Compute heredity integral (just integrate (mR/J) × q x sigma_hat_alpha!)
-        sigma_alpha = self.mechanics.compute_heredity_integral(
-            self.mR_alpha_history / J,
-            survival_values,
-            sigma_hat_alpha = self.sigma_hat_history,
-            tau_min=self.tau_min,
-            dt=dt,
-            current_timestep=target_timestep,
-            integration_method=integration_method
-        )
-        self.sigma_alpha_history.append(sigma_alpha)
-
-        return self.get_sigma_alpha(target_timestep)
+        # STEP 2: Compute active stress (if constituent is contractile)
+        if self.is_active:
+            print(f"        {self.name}: Computing active stress")
+            
+            # Compute active radius a_act(s)
+            a_act = self.compute_active_radius(
+                target_timestep,
+                dt,
+                integration_method
+            )
+            
+            # Compute σ̂_act (circumferential component only)
+            sigma_hat_act = self.compute_active_stress_component(target_timestep)
+            
+            # Store for debugging/output
+            self.active_stress_history.append(sigma_hat_act)
+            
+            # Compute σ_act with mass fraction weighting
+            # σ_act = (ρR_α / (J·ρR_h)) · σ̂_act
+            rhoR_alpha = self.get_rhoR_alpha(target_timestep)
+            rhoR_h = self.layer.get_homeostatic_density()
+            J = self.layer.J_history[target_timestep]
+            
+            active_stress_scalar = (rhoR_alpha / (J * rhoR_h)) * sigma_hat_act
+            
+            # Build active stress tensor (circumferential component only)
+            # In cylindrical coords: σ_act = [0, σ_θθ, 0] (diagonal)
+            sigma_alpha_active = np.zeros((3, 3))
+            sigma_alpha_active[1, 1] = active_stress_scalar  # Circumferential
+            
+            print(f"          a_act = {a_act*1000:.4f} mm")
+            print(f"          σ̂_act = {sigma_hat_act/1000:.2f} kPa")
+            print(f"          σ_act = {active_stress_scalar/1000:.2f} kPa")
+            
+            # STEP 3: Sum passive + active
+            sigma_alpha = sigma_alpha + sigma_alpha_active
+            
+            # Store total stress
+            self.stress_history.append(sigma_alpha)
+            
+        return sigma_alpha
 
 
 class MultiFiberFamilyConstituent(Constituent):

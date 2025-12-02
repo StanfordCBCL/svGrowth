@@ -1,0 +1,15 @@
+# Core dependencies for svGrowth
+
+# Scientific computing
+numpy>=1.24.0
+
+# JIT compilation (used in tensor_operations.py)
+numba>=0.58.0
+
+# YAML configuration parsing
+pyyaml>=6.0
+
+# Optional: Development tools (uncomment if needed)
+# pytest>=7.4.0
+# black>=23.0.0
+# pylint>=3.0.0
