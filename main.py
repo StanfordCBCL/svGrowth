@@ -22,11 +22,13 @@ def main():
         output_directory=sim_params['output_directory'],
         dt=sim_params['dt'],
         n_steps=int(sim_params['n_days'] / sim_params['dt']),
-        tolerance=sim_params.get('tolerance', 1e-6),
-        max_iterations=sim_params.get('max_iterations', 50),
+        tolerance=float(sim_params.get('tolerance', 1e-12)),
+        max_iterations=int(sim_params.get('max_iterations', 50)),
         integration_method=sim_params.get('integration_method', 'trapezoidal'),
         survival_function_computation=sim_params.get('survival_function_computation', 'backward'), 
-        verbose=sim_params.get('verbose', False)
+        verbose=sim_params.get('verbose', False),
+        detail_level=sim_params.get('detail_level', 1),
+        debug_level=sim_params.get('debug_level', 0)    
     )
     
     sim.run()

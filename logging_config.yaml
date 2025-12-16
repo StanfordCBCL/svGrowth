@@ -1,0 +1,89 @@
+logging:
+  version: 1
+  disable_existing_loggers: false
+  
+  # =========================================================================
+  # FORMATTERS - How log messages look
+  # =========================================================================
+  formatters:
+    # Simple: Just the message (like print statements)
+    simple:
+      format: '%(message)s'
+    
+    # With module name: [module_name] message
+    with_module:
+      format: '[%(name)s] %(message)s'
+    
+    # Full details: [LEVEL] module_name: message
+    detailed:
+      format: '[%(levelname)s] %(name)s: %(message)s'
+  
+  # =========================================================================
+  # HANDLERS - Where log messages go
+  # =========================================================================
+  handlers:
+    # Console handler - prints to terminal
+    console:
+      class: logging.StreamHandler
+      level: DEBUG                    # Minimum level for this handler
+      formatter: detailed             # Use detailed format
+      stream: ext://sys.stdout        # Print to stdout
+    
+    # File handler - writes to file
+    file:
+      class: logging.FileHandler
+      level: DEBUG                    # Log everything to file
+      filename: simulation_debug.log  # Output file
+      formatter: detailed             # Use detailed format for file
+      mode: w                         # 'w' = overwrite, 'a' = append
+
+  # =========================================================================
+  # MODULE LOGGER - Module default settings
+  # =========================================================================
+  # loggers:
+  #   solver:
+  #     level: DEBUG
+  #     handlers: [console, file]
+  #     propagate: false
+    
+  #   layer:
+  #     level: INFO
+  #     handlers: [console, file]
+  #     propagate: false
+    
+  #   constituent:
+  #     level: WARNING
+  #     handlers: [console, file]
+  #     propagate: false
+    
+  #   mechanics:
+  #     level: WARNING
+  #     handlers: [console, file]
+  #     propagate: false
+    
+  #   kinetics:
+  #     level: WARNING
+  #     handlers: [console, file]
+  #     propagate: false
+    
+  #   deformation_kinematics:
+  #     level: INFO
+  #     handlers: [console, file]
+  #     propagate: false
+    
+  #   configuration:
+  #     level: INFO
+  #     handlers: [console, file]
+  #     propagate: false
+    
+  #   simulation:
+  #     level: INFO
+  #     handlers: [console, file]
+  #     propagate: false
+
+  # =========================================================================
+  # ROOT LOGGER - Global default settings
+  # =========================================================================
+  root:
+    level: DEBUG                       # Global level (INFO = show INFO, WARNING, ERROR)
+    handlers: [console, file]         # Send to both console and file

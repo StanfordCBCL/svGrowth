@@ -40,6 +40,11 @@ class TensorOperations:
         return 0.5 * (C - I)
     
     @staticmethod
+    def jacobian(F: np.ndarray) -> float:
+        """J = det(F)"""
+        return np.linalg.det(F)
+    
+    @staticmethod
     def principal_stretches(F: np.ndarray) -> Tuple[float, float, float]:
         """Compute principal stretches from F.
         
@@ -67,8 +72,3 @@ class TensorOperations:
         I2 = 0.5 * (I1**2 - np.trace(C @ C))
         I3 = np.linalg.det(C)
         return I1, I2, I3
-    
-    @staticmethod
-    def jacobian(F: np.ndarray) -> float:
-        """J = det(F)"""
-        return np.linalg.det(F)

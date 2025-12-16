@@ -6,7 +6,6 @@ from abc import ABC, abstractmethod
 from kinetics import Kinetics  
 from kinetics_interface import ConstituentKineticsContext
 from constitutive_laws import ConstitutiveModel
-import layer
 from mechanics import Mechanics
 from mechanics_interface import ConstituentMechanicsContext
 
@@ -35,8 +34,9 @@ class Constituent(ABC):
         # Active stress histories (only allocated if is_active=True)
         self.active_radius_history = []  # [a_act(0), a_act(1), ...]
         self.active_survival_history = []  # [[q_act(0,0)], [q_act(1,0), q_act(1,1)], ...]
-        self.active_stress_history = []  # [σ_act(0), σ_act(1), ...] (scalars, circumferential only)
-    
+        self.sigma_hat_act_history = []  # [σ^_act(0), σ^_act(1), ...] (tensors)
+        self.active_stress_history = []  # [σ_act(0), σ_act(1), ...] (tensors)
+
         # Referential mass density evolution (rhoR_alpha) - timestep-indexed history
         self.rhoR_alpha_history = []  # List of mass densities over time
         self.survival_history = [] # List of survival fractions over time (for each cohort)
@@ -79,6 +79,38 @@ class Constituent(ABC):
     def _timestep_exists(self, timestep):
         """Check if a specific timestep exists in history."""
         return 0 <= timestep < len(self.rhoR_alpha_history)
+
+    def _update_history(self, history: List, timestep: int, value):
+        """Update history at timestep (append if new, update if exists).
+        
+        This method handles the fixed-point iteration case where the same
+        timestep may be computed multiple times during refinement.
+        
+        TODO: Future: When pre-allocated arrays are used, this will simply be:
+            history[timestep] = value
+        
+        Args:
+            history: History list to update (e.g., rhoR_alpha_history)
+            timestep: Timestep index
+            value: Value to store
+        """
+        if timestep < len(history):
+            # Timestep exists - update it (fixed-point refinement)
+            history[timestep] = value
+        else:
+            # New timestep - append
+            # Special case: if history is empty, we can append any timestep
+            # (handles cases where t=0 wasn't stored, e.g., elastin F_alpha_history)
+            if len(history) == 0:
+                history.append(value)
+            # Otherwise, verify we're appending to the next sequential timestep
+            elif timestep != len(history):
+                raise ValueError(
+                    f"Cannot append to timestep {timestep}: "
+                    f"expected {len(history)} (history length)"
+                )
+            else:
+                history.append(value)
 
     # ABSTRACT METHODS - Must be implemented by subclasses
     @abstractmethod
@@ -236,8 +268,8 @@ class SingleConstituent(Constituent):
                     f"For helical (45°), implementation is needed."
                 )
             
-            # Create tensor with zeros except fiber direction
-            self.deposition_stretch = np.zeros((3, 3))
+            # Create tensor with ones except fiber direction
+            self.deposition_stretch = np.eye(3)
             self.deposition_stretch[fiber_component, fiber_component] = self.deposition_stretch_scalar
             
             print(f"        Deposition stretch: λ_dep = {self.deposition_stretch_scalar:.2f} (fiber-only)")
@@ -325,8 +357,8 @@ class SingleConstituent(Constituent):
         self.active_survival_history.append([1.0])
         
         # Active stress at homeostasis (compute using homeostatic conditions)
-        sigma_act_h = self._compute_active_stress_at_homeostasis()
-        self.active_stress_history.append(sigma_act_h)
+        sigma_hat_act_h = self._compute_active_stress_at_homeostasis()
+        self.sigma_hat_act_history.append(sigma_hat_act_h)
         
         # Print summary
         print(f"          T_act = {active_props['T_act_h']:.1f} kPa")
@@ -334,7 +366,7 @@ class SingleConstituent(Constituent):
         print(f"          λ_0 = {self.active_properties['lambda_0']:.2f}, λ_m = {self.active_properties['lambda_m']:.2f}")
         print(f"          CB = {self.active_properties['CB']:.4f}")
         print(f"          a_act(0) = {a_h*1000:.4f} mm")
-        print(f"          σ_act(0) = {sigma_act_h/1000:.2f} kPa")
+        print(f"          σ_hat_act(0) = {sigma_hat_act_h/1000:.2f} kPa")
 
     def _compute_active_stress_at_homeostasis(self) -> float:
         """Compute homeostatic active stress (at t=0).
@@ -357,13 +389,9 @@ class SingleConstituent(Constituent):
         
         # Active stress
         T_act = self.active_properties['T_act']
-        sigma_act_h = T_act * (1.0 - np.exp(-C**2)) * lambda_act * parab_act
+        sigma_hat_act_h = T_act * (1.0 - np.exp(-C**2)) * lambda_act * parab_act
         
-        return sigma_act_h
-        
-    def get_mass_density(self, current_timestep):
-        """Get current mass density (convenience method)."""
-        return self.get_rhoR_alpha(current_timestep)
+        return sigma_hat_act_h
 
     def get_stress(self):
         """Get intramural stress contribution."""
@@ -381,24 +409,11 @@ class SingleConstituent(Constituent):
             self.stress_contribution = 0.0
         
         return self.stress_contribution
-    
-    def update_kinetics(self, dt):
-        """Update mass evolution."""
-        self._update_production_rate()
-        dmass_dt = self.production_rate - self.degradation_rate * self.mass_density
-        self.mass_density += dmass_dt * dt
-        self.history['mass_density'].append(self.mass_density)
-    
-    def _update_production_rate(self):
-        """Update production rate based on stimuli."""
-        stimulus = 1.0  # Mock
-        base_production = self.params.get('stress_production_gain', 0.0)
-        self.production_rate = base_production * stimulus
 
     #TODO: Consider moving this logic to the numerics/simulation layer, and use set_rhoR_alpha function for the prediction.   
     def guess_rhoR_alpha(self, target_timestep, guess_method="from_previous_timestep"):
         """Guess referential mass density for target timestep."""
-          
+        
         if target_timestep < 0:
             raise ValueError(f"Target timestep {target_timestep} must be >= 0")
         
@@ -442,7 +457,7 @@ class SingleConstituent(Constituent):
         # If no degradation/production - maintain previous referential mass density
         if self.kinetics is None:
             previous_rhoR_alpha = self.rhoR_alpha_history[target_timestep - 1]
-            self.rhoR_alpha_history.append(previous_rhoR_alpha)
+            self._update_history(self.rhoR_alpha_history, target_timestep, previous_rhoR_alpha)
             return self.get_rhoR_alpha(target_timestep)
         
         # Pass necessary data from constituent to kinetics class
@@ -450,14 +465,14 @@ class SingleConstituent(Constituent):
 
         # STEP 1: Compute k_alpha at target timestep (Constituent asks Kinetics for computation)
         k_alpha = self.kinetics.compute_k_alpha(context, target_timestep)
-        self.k_alpha_history.append(k_alpha)
+        self._update_history(self.k_alpha_history, target_timestep, k_alpha)
 
         # STEP 2: Compute production rate
         # TODO: improve fail-safe if we don't have a guess for rhoR_alpha.
         # Consider how this interacts with guess_rhoR_alpha (which is needed for this step).
         rhoR_alpha = self.get_rhoR_alpha(target_timestep) # comes from guess
         mR_alpha = self.kinetics.compute_production_rate(context, target_timestep, k_alpha, rhoR_alpha)
-        self.mR_alpha_history.append(mR_alpha)
+        self._update_history(self.mR_alpha_history, target_timestep, mR_alpha)
 
         # STEP 3: Compute survival function q(s, tau) for all cohorts
         survival_values = self.kinetics.compute_survival_function(
@@ -468,7 +483,7 @@ class SingleConstituent(Constituent):
             integration_method=integration_method,
             survival_function_computation=survival_function_computation
         )
-        self.survival_history.append(survival_values)
+        self._update_history(self.survival_history, target_timestep, survival_values)
 
         # Step 4: Compute heredity integral (just integrate mR × q!)
         rhoR_alpha = self.kinetics.compute_heredity_integral(
@@ -477,7 +492,8 @@ class SingleConstituent(Constituent):
             tau_min=self.tau_min,
             dt=dt,
             current_timestep=target_timestep,
-            integration_method=integration_method
+            integration_method=integration_method,
+            rhoR_alpha_homeostatic=self.homeostatic_referential_density
         )
         
         self.rhoR_alpha_history[target_timestep] = rhoR_alpha
@@ -507,6 +523,7 @@ class SingleConstituent(Constituent):
         Returns:
             Active radius a_act (m)
         """
+        # TODO: Refactor
         if not self.is_active:
             raise RuntimeError(f"Constituent '{self.name}' is not active")
         
@@ -533,10 +550,10 @@ class SingleConstituent(Constituent):
             dt=dt,
             current_timestep=target_timestep,
             integration_method=integration_method,
-            survival_function_computation='backward'  # Use optimized method
+            survival_function_computation='naive'  
         )
         
-        self.active_survival_history.append(q_act_values)
+        self._update_history(self.active_survival_history, target_timestep, q_act_values)
         
         # STEP 2: Build integrand: k_act · a(τ) · q_act(s,τ)
         integrand = []
@@ -555,9 +572,17 @@ class SingleConstituent(Constituent):
             0              # First index
         )
         
-        a_act = integrator.integrate(integrand)
+        a_act_deposited = integrator.integrate(integrand)
+
+        # STEP 4: Add initial active material contribution
+        # TODO: clean up step 4
+        a_act_homeostatic = self.active_radius_history[0]  # a_act(0) from homeostasis
+        q_act_initial = q_act_values[0]  # q_act(s, 0) - survival of initial active material
+        a_act_initial = a_act_homeostatic * q_act_initial
+
+        a_act = a_act_initial + a_act_deposited
         
-        self.active_radius_history.append(a_act)
+        self._update_history(self.active_radius_history, target_timestep, a_act)
         
         return a_act
 
@@ -636,13 +661,13 @@ class SingleConstituent(Constituent):
         context = ConstituentMechanicsContext(self)
 
         if self.kinetics is None:
-            print(f"        {self.name}: No kinetics - single cohort (τ=0)")
+            #print(f"        {self.name}: No kinetics - single cohort (τ=0)")
 
             # STEP 1: Compute F_α for single cohort (τ=0)
             F_alpha = self.mechanics.compute_F_alpha_for_cohort(
                 context, target_timestep, deposition_timestep=0
             )
-            self.F_alpha_history.append([F_alpha]) # Store (as single-element list for consistency)
+            self._update_history(self.F_alpha_history, target_timestep, [F_alpha])
 
             # STEP 2: Compute S_hat_α (PK2 stress) from constitutive model
             S_hat_alpha = self.mechanics.compute_S_hat_alpha_for_cohort(
@@ -650,26 +675,27 @@ class SingleConstituent(Constituent):
             )
 
             # STEP 3: Compute σ̂_α (Cauchy stress)
+            J = self.layer.get_volume_ratio(target_timestep)
             sigma_hat_alpha = self.mechanics.compute_sigma_hat_alpha_for_cohort(
-                F_alpha, S_hat_alpha
+                J, F_alpha, S_hat_alpha
             )
-            self.sigma_hat_history.append([sigma_hat_alpha])
+            self._update_history(self.sigma_hat_history, target_timestep, [sigma_hat_alpha])
             
             # STEP 4: No heredity integral - σ_α = (ρR_α/ρR) σ̂_α
             # TODO: abstract with mass fraction?
             rhoR_alpha = self.get_rhoR_alpha(target_timestep)
             rhoR_h = self.layer.get_homeostatic_density()
             sigma_alpha = (rhoR_alpha / rhoR_h) * sigma_hat_alpha
-            self.stress_history.append(sigma_alpha)
+            self._update_history(self.stress_history, target_timestep, sigma_alpha)
             
             return sigma_alpha
 
-        print(f"        {self.name}: With kinetics - multiple cohorts")
+        #print(f"        {self.name}: With kinetics - multiple cohorts")
         # STEP 1: Compute F_α(s,τ) for all cohorts τ ∈ [τ_min, s]
         F_alpha_cohorts = self.mechanics.compute_F_alpha_for_all_cohorts(
             context, target_timestep
         )
-        self.F_alpha_history.append(F_alpha_cohorts)
+        self._update_history(self.F_alpha_history, target_timestep, F_alpha_cohorts)
         
         # STEP 2: Compute S_hat_α(s,τ) (PK2 stress) for all cohorts
         S_hat_alpha_cohorts = self.mechanics.compute_S_hat_alpha_for_all_cohorts(
@@ -677,31 +703,34 @@ class SingleConstituent(Constituent):
         )
         
         # STEP 3: Compute σ̂_α(s,τ) (Cauchy stress) for all cohorts
+        J = self.layer.get_volume_ratio(target_timestep)
         sigma_hat_alpha_cohorts = self.mechanics.compute_sigma_hat_alpha_for_all_cohorts(
-            F_alpha_cohorts, S_hat_alpha_cohorts
+            J, F_alpha_cohorts, S_hat_alpha_cohorts
         )
-        self.sigma_hat_history.append(sigma_hat_alpha_cohorts)
+        self._update_history(self.sigma_hat_history, target_timestep, sigma_hat_alpha_cohorts)
         
         # STEP 4: Integrate heredity integral: σ_α = ∫ (mR·q/ρ_h) · σ̂_α dτ
         # TODO: consider passing whole survival history to integrate_constituent_stress
         # to improve readability? 
+        # TODO: break into helper function
         survival_values = self.survival_history[target_timestep]
-        rho_h = self.layer.get_homeostatic_density()
-        
+        rhoR_homeostatic = self.layer.get_homeostatic_density()
+        rhoR_alpha_homeostatic = self.get_rhoR_alpha(0)
         sigma_alpha = self.mechanics.integrate_constituent_stress(
             sigma_hat_alpha_cohorts,
             self.mR_alpha_history,
             survival_values,
-            rho_h,
+            rhoR_homeostatic,
             self.tau_min,
             target_timestep,
             dt,
-            integration_method
+            integration_method,
+            rhoR_alpha_homeostatic
         )
 
         # STEP 2: Compute active stress (if constituent is contractile)
         if self.is_active:
-            print(f"        {self.name}: Computing active stress")
+            #print(f"        {self.name}: Computing active stress")
             
             # Compute active radius a_act(s)
             a_act = self.compute_active_radius(
@@ -712,36 +741,84 @@ class SingleConstituent(Constituent):
             
             # Compute σ̂_act (circumferential component only)
             sigma_hat_act = self.compute_active_stress_component(target_timestep)
+            self._update_history(self.sigma_hat_act_history, target_timestep, sigma_hat_act)
             
-            # Store for debugging/output
-            self.active_stress_history.append(sigma_hat_act)
-            
-            # Compute σ_act with mass fraction weighting
-            # σ_act = (ρR_α / (J·ρR_h)) · σ̂_act
+            # Compute σ_act = (ρR_α / (J·ρR_h)) · σ̂_act 
+            sigma_alpha_active = np.zeros((3, 3))
+            J = self.layer.get_volume_ratio(target_timestep)
             rhoR_alpha = self.get_rhoR_alpha(target_timestep)
             rhoR_h = self.layer.get_homeostatic_density()
-            J = self.layer.J_history[target_timestep]
-            
             active_stress_scalar = (rhoR_alpha / (J * rhoR_h)) * sigma_hat_act
-            
-            # Build active stress tensor (circumferential component only)
-            # In cylindrical coords: σ_act = [0, σ_θθ, 0] (diagonal)
-            sigma_alpha_active = np.zeros((3, 3))
             sigma_alpha_active[1, 1] = active_stress_scalar  # Circumferential
             
-            print(f"          a_act = {a_act*1000:.4f} mm")
-            print(f"          σ̂_act = {sigma_hat_act/1000:.2f} kPa")
-            print(f"          σ_act = {active_stress_scalar/1000:.2f} kPa")
+            # TODO: Add to debug
+            # print(f"          a_act = {a_act*1000:.4f} mm")
+            # print(f"          σ̂_act = {sigma_hat_act/1000:.2f} kPa")
+            # print(f"          σ_act = {active_stress_scalar/1000:.2f} kPa")
             
             # STEP 3: Sum passive + active
             sigma_alpha = sigma_alpha + sigma_alpha_active
             
-            # Store total stress
-            self.stress_history.append(sigma_alpha)
+        # Store total stress
+        self._update_history(self.stress_history, target_timestep, sigma_alpha)
             
         return sigma_alpha
 
+    def to_dict(self, timestep: int, time: float = None) -> Dict[str, Any]:
+        """Convert constituent state to dictionary for serialization.
+        
+        Args:
+            timestep: Timestep index
+            time: Simulation time (optional)
+            
+        Returns:
+            Dictionary containing constituent state
+        """
+        data = {
+            'time': time if time is not None else float(timestep),
+            'rho_alpha': self.get_rhoR_alpha(timestep)
+        }
+        
+        # Add kinetics data if present
+        if hasattr(self, 'k_alpha_history') and len(self.k_alpha_history) > timestep:
+            data['k_alpha'] = self.k_alpha_history[timestep]
+        else:
+            data['k_alpha'] = None
+            
+        if hasattr(self, 'mR_alpha_history') and len(self.mR_alpha_history) > timestep:
+            data['mR_alpha'] = self.mR_alpha_history[timestep]
+        else:
+            data['mR_alpha'] = None
+        
+        # Add stress if available
+        # TODO: streamline with a loop
+        if len(self.stress_history) > timestep:
+            data['stress_r'] = self.stress_history[timestep][0,0]
+            data['stress_theta'] = self.stress_history[timestep][1,1]
+            data['stress_z'] = self.stress_history[timestep][2,2]
+        else:
+            data['stress_r'] = None
+            data['stress_theta'] = None
+            data['stress_z'] = None
 
+        if len(self.sigma_hat_history) > timestep:
+            data['sigma_hat_r'] = self.sigma_hat_history[timestep][0][0,0]
+            data['sigma_hat_theta'] = self.sigma_hat_history[timestep][0][1,1]
+            data['sigma_hat_z'] = self.sigma_hat_history[timestep][0][2,2]
+        else:
+            data['sigma_hat_r'] = None
+            data['sigma_hat_theta'] = None
+            data['sigma_hat_z'] = None
+               
+        if len(self.sigma_hat_act_history) > timestep and self.is_active:
+            data['a_act'] = self.active_radius_history[timestep]
+            data['sigma_hat_act'] = self.sigma_hat_act_history[timestep]
+        else:
+            data['a_act'] = None
+            data['sigma_hat_act'] = None
+
+        return data
+    
 class MultiFiberFamilyConstituent(Constituent):
     #TODO: To clean up after code works with single constituent.
     """Multi-fiber family constituent (e.g., collagen with multiple orientations)."""
@@ -814,10 +891,6 @@ class MultiFiberFamilyConstituent(Constituent):
         print(f"          {family_name}: mass fraction = {family_mass_fraction:.4f}")
         
         return fiber_family
-    
-    def get_mass_density(self, current_timestep):
-        """Get total mass density from all fiber families."""
-        return sum(family.get_rhoR_alpha(current_timestep) for family in self.fiber_families)
 
     def get_stress(self):
         """Get total intramural stress from all fiber families."""
@@ -827,16 +900,6 @@ class MultiFiberFamilyConstituent(Constituent):
         """Compute total stress from all fiber families."""
         total_stress = sum(family.compute_stress(current_timestep) for family in self.fiber_families)
         return total_stress
-    
-    def add_timestep_with_guess(self, current_timestep):
-        """Add next timestep for all fiber families and update total."""
-        # Add timestep for each fiber family
-        for family in self.fiber_families:
-            family.add_timestep_with_guess(current_timestep)
-        
-        # Update total mass density history
-        total_density = sum(family.get_rhoR_alpha(current_timestep + 1) for family in self.fiber_families)
-        self.rhoR_alpha_history.append(total_density)
     
     def guess_rhoR_alpha(self, target_timestep, guess_method="from_previous_timestep"):
         """Guess referential mass density for target timestep using specified method."""

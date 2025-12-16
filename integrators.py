@@ -47,80 +47,80 @@ class TrapezoidIntegrator(Integrator):
     from start to stop indices (counting backward).
     """
 
-    # def integrate(self, f: List[float]) -> float:
-    #     """
-    #     Perform trapezoidal integration.
-
-    #     Args:
-    #         f (List[float]): Discrete function values.
-
-    #     Returns:
-    #         float: Approximate integral value.
-        
-    #     Raises:
-    #         ValueError: If fewer than two points are available.
-    #     """
-    #     n = self.start - self.stop + 1 
-    #     if n < 2:
-    #         raise ValueError("At least two points are required for trapezoidal integration.")
-
-    #     integral_value = 0.0
-    #     # Integration backward in time
-    #     for i in range(self.start, self.stop, -1):
-    #         integral_value += (f[i] + f[i - 1]) * self.dt / 2
-
-    #     return integral_value
-
-# Update TrapezoidalIntegrator.integrate() with better debugging
-
     def integrate(self, f: List[float]) -> float:
         """
         Perform trapezoidal integration.
 
         Args:
-            f (List[float]): Discrete function values [f(0), f(1), ..., f(n)]
+            f (List[float]): Discrete function values.
 
         Returns:
             float: Approximate integral value.
         
         Raises:
-            ValueError: If fewer than two points are available or invalid bounds.
+            ValueError: If fewer than two points are available.
         """
-        # Debug output
-        print(f"        [TrapIntegrator] Integrating from index {self.stop} to {self.start}")
-        print(f"        [TrapIntegrator] Input array has {len(f)} values (indices 0 to {len(f)-1})")
-        print(f"        [TrapIntegrator] dt = {self.dt}")
-        
-        # Validation
-        n = self.start - self.stop + 1  # Number of points
-        
-        if n < 1:
-            raise ValueError(
-                f"Invalid bounds: start={self.start}, stop={self.stop}. "
-                f"Expected start >= stop."
-            )
-        
-        if self.start >= len(f):
-            raise ValueError(
-                f"start index {self.start} out of bounds for array of length {len(f)}"
-            )
-        
-        if self.stop < 0:
-            raise ValueError(f"stop index {self.stop} cannot be negative")
-        
-        if n == 1:
-            # Single point - no integration needed
-            print(f"        [TrapIntegrator] Single point, returning 0.0")
-            return 0.0
-        
-        # Perform backward trapezoidal integration
+        n = self.start - self.stop + 1 
+        if n < 2:
+            raise ValueError("At least two points are required for trapezoidal integration.")
+
         integral_value = 0.0
+        # Integration backward in time
         for i in range(self.start, self.stop, -1):
             integral_value += (f[i] + f[i - 1]) * self.dt / 2
-            
-        print(f"        [TrapIntegrator] Integrated {n-1} intervals, result = {integral_value:.6f}")
-        
+
         return integral_value
+
+# Update TrapezoidalIntegrator.integrate() with better debugging
+
+    # def integrate(self, f: List[float]) -> float:
+    #     """
+    #     Perform trapezoidal integration.
+
+    #     Args:
+    #         f (List[float]): Discrete function values [f(0), f(1), ..., f(n)]
+
+    #     Returns:
+    #         float: Approximate integral value.
+        
+    #     Raises:
+    #         ValueError: If fewer than two points are available or invalid bounds.
+    #     """
+    #     # Debug output
+    #     print(f"        [TrapIntegrator] Integrating from index {self.stop} to {self.start}")
+    #     print(f"        [TrapIntegrator] Input array has {len(f)} values (indices 0 to {len(f)-1})")
+    #     print(f"        [TrapIntegrator] dt = {self.dt}")
+        
+    #     # Validation
+    #     n = self.start - self.stop + 1  # Number of points
+        
+    #     if n < 1:
+    #         raise ValueError(
+    #             f"Invalid bounds: start={self.start}, stop={self.stop}. "
+    #             f"Expected start >= stop."
+    #         )
+        
+    #     if self.start >= len(f):
+    #         raise ValueError(
+    #             f"start index {self.start} out of bounds for array of length {len(f)}"
+    #         )
+        
+    #     if self.stop < 0:
+    #         raise ValueError(f"stop index {self.stop} cannot be negative")
+        
+    #     if n == 1:
+    #         # Single point - no integration needed
+    #         print(f"        [TrapIntegrator] Single point, returning 0.0")
+    #         return 0.0
+        
+    #     # Perform backward trapezoidal integration
+    #     integral_value = 0.0
+    #     for i in range(self.start, self.stop, -1):
+    #         integral_value += (f[i] + f[i - 1]) * self.dt / 2
+            
+    #     print(f"        [TrapIntegrator] Integrated {n-1} intervals, result = {integral_value:.6f}")
+        
+    #     return integral_value
 
 
 class SimpsonIntegrator(Integrator):
@@ -154,28 +154,29 @@ class SimpsonIntegrator(Integrator):
             trapezoid_rule = TrapezoidIntegrator(self.dt, self.start, self.stop)
             return trapezoid_rule.integrate(f)
 
-        integral_value = 0.0
         simpson_stop = self.stop  # Stop index for the main Simpson's rule loop
 
         # If number of integration points is even, apply trapezoidal rule on last interval
+        trapezoid_value = 0.0
         if n % 2 == 0:
             trapezoid_rule = TrapezoidIntegrator(self.dt, self.stop + 1, self.stop)
-            integral_value += trapezoid_rule.integrate(f)
+            trapezoid_value += trapezoid_rule.integrate(f)
             simpson_stop += 1  # Exclude last interval from Simpson’s rule
 
         # Add first and last terms
-        integral_value += f[self.start] + f[simpson_stop]
+        simpson_value = f[self.start] + f[simpson_stop]
 
         # Add 4 * f(odd indices)
         for i in range(self.start - 1, simpson_stop, -2):
-            integral_value += 4 * f[i]
+            simpson_value += 4 * f[i]
 
         # Add 2 * f(even indices)
         for i in range(self.start - 2, simpson_stop + 1, -2):
-            integral_value += 2 * f[i]
+            simpson_value += 2 * f[i]
 
-        integral_value *= self.dt / 3
-        return integral_value
+        simpson_value *= self.dt / 3
+
+        return trapezoid_value + simpson_value
 
 
 # =============================================================================

@@ -13,7 +13,6 @@ simulation:
   integration_method: "trapezoidal"                  # For heredity integrals (trapezoidal, simpson)
   survival_function_computation: "naive"         # For survival function (naive, backward) # TODO: revised naming
   
-  detail_level: 1
   verbose: true
 
 
@@ -106,6 +105,7 @@ layers:
             stimulus_function_form: "linear" #TODO: add sigmoidal
             gain_params:
               intramural_stress: 2.0
+              wss: -1.0
           
           degradation:
             survival_function_form: "exponential"
@@ -134,6 +134,7 @@ layers:
             stimulus_function_form: "linear"
             gain_params:
               intramural_stress: 1.0
+              wss: -0.5
           
           degradation:
             survival_function_form: "exponential"

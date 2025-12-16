@@ -160,20 +160,25 @@ AVAILABLE_MODELS = {
         "isotropy": "isotropic",
         "parameters": ["c"],
         "units": {"c": "Pa"}
+        #TODO: add checks to perform
     },
     "fung_exponential": {
         "description": "Fung exponential model for biological tissues",
         "isotropy": "anisotropic",
         "parameters": ["c1", "c2"],
+        "optional_parameters": ["allow_compression"],
         "required": ["fiber_orientation"],  # Must specify fiber direction
-        "units": {"c1": "Pa", "c2": "dimensionless"}
+        "units": {"c1": "Pa", "c2": "dimensionless"},
+        "defaults": {"allow_compression": False}
     },
     "holzapfel_ogden": {
         "description": "Holzapfel-Ogden model for arterial walls",
         "isotropy": "anisotropic",  
         "parameters": ["c", "k1", "k2"],
+        "optional_parameters": ["allow_compression"],
         "required": ["fiber_orientation"],
-        "units": {"c": "Pa", "k1": "Pa", "k2": "dimensionless"}
+        "units": {"c": "Pa", "k1": "Pa", "k2": "dimensionless"},
+        "defaults": {"allow_compression": False}
     }
 }
 
@@ -203,11 +208,8 @@ class NeoHookeanModel(ConstitutiveModel):
         F = deformation_gradient
         I = np.eye(3)
 
-        C = TensorOperations.right_cauchy_green(F)
-        C_inv = TensorOperations.inverse(C)
-
-        # TODO: generalize with correct formula
-        S_pk2 = 2 * self.c * (I - C_inv)
+        # TODO: generalize if needed
+        S_pk2 = self.c * I
 
         return S_pk2
 
@@ -237,6 +239,7 @@ class FungExponentialModel(ConstitutiveModel):
         super().__init__(parameters)
         self.c1 = parameters['c1']  # Material constant in Pa
         self.c2 = parameters['c2']  # Dimensionless exponential parameter
+        self.allow_compression = parameters.get('allow_compression', False) # TODO: think of how to handle defaults better
     
     def _validate_parameters(self):
         """Validate Fung exponential parameters."""
@@ -249,6 +252,10 @@ class FungExponentialModel(ConstitutiveModel):
             raise ValueError("Fung parameter 'c1' must be positive")
         if self.parameters['c2'] <= 0:
             raise ValueError("Fung parameter 'c2' must be positive")
+        
+        if 'allow_compression' in self.parameters:
+            if not isinstance(self.parameters['allow_compression'], bool):
+                raise ValueError("Parameter 'allow_compression' must be boolean (True/False)")
     
     def compute_PK2_stress(self, deformation_gradient: np.ndarray) -> np.ndarray:
         """Compute deviatoric 2nd Piola-Kirchhoff stress for Fung model.
@@ -272,13 +279,20 @@ class FungExponentialModel(ConstitutiveModel):
         a0 = self.fiber_orientation
         
         # Compute fiber strain
-        E_f = self.compute_fiber_strain(F, a0)
-        
+        lambda_f = self.compute_fiber_stretch(F, a0)
+
+        # Fiber is compressed - buckles and carries no load
+        if not self.allow_compression and lambda_f < 1:
+            lambda_f = 1
+
+        # Fiber invariant
+        Q1 = lambda_f**2 - 1
+
         # Exponential term
-        exp_term = np.exp(self.c2 * E_f**2)
-        
+        Q2 = self.c2 * Q1**2
+
         # Stress coefficient
-        coeff = self.c1 * self.c2 * E_f * exp_term
+        coeff = self.c1 * Q1 * np.exp(Q2)
         
         # Structural tensor: a0 ⊗ a0 (dyadic product)
         A = np.outer(a0, a0)
@@ -301,13 +315,19 @@ class FungExponentialModel(ConstitutiveModel):
             Strain energy density (Pa or J/m³)
         """        
         F = deformation_gradient
-        a0 = self.fiber_orientation
+        # a0 = self.fiber_orientation
         
-        # Compute fiber strain
-        E_f = self.compute_fiber_strain(F, a0)
+        # # Compute fiber strain
+        # lambda_f = self.compute_fiber_stretch(F, a0)
+
+        # if not self.allow_compression and lambda_f < 1:
+        #     # TODO: confirm correct behavior for strain energy, 0 as placeholder
+        #     return 0
+                
+        # # Strain energy
+        # energy = (self.c1 / 2.0) * (np.exp(self.c2 * E_f**2) - 1.0)
         
-        # Strain energy
-        energy = (self.c1 / 2.0) * (np.exp(self.c2 * E_f**2) - 1.0)
+        energy = 1  # PLACEHOLDER. TODO: Implement properly
         
         return float(energy)
     
@@ -317,7 +337,10 @@ class FungExponentialModel(ConstitutiveModel):
         
         if self.fiber_angle_degrees is not None:
             model_str += f", fiber={self.fiber_angle_degrees:.1f}°"
-        
+
+        if not self.allow_compression:
+            model_str += ", no-compression"
+
         model_str += ")"
         return model_str
 
@@ -336,6 +359,7 @@ class HolzapfelOgdenModel(ConstitutiveModel):
         self.c = parameters['c']
         self.k1 = parameters['k1']
         self.k2 = parameters['k2']
+        self.allow_compression = parameters.get('allow_compression', False) # TODO: think of how to handle defaults better
     
     def _validate_parameters(self):
         """Validate Holzapfel-Ogden parameters."""

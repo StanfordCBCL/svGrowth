@@ -65,6 +65,7 @@ class DegradationRateFunction(ABC):
         """
         pass
 
+    #TODO: validate inputs function
 
 class ConstantDegradationRate(DegradationRateFunction):
     """Constant degradation rate: k_alpha = k_alpha_h"""
@@ -291,6 +292,9 @@ class LinearProductionRate(ProductionRateFunction):
             
         return m_base * gamma
 
+    #TODO: return the closed form solution of production rate
+    # def __repr__(self):
+
 
 # =============================================================================
 # MAIN KINETICS CLASS
@@ -359,11 +363,14 @@ class Kinetics:
         tau_min: int,
         dt: float,
         current_timestep: int,
-        integration_method: str 
+        integration_method: str,
+        rhoR_alpha_homeostatic: float
     ) -> float:
         """Compute heredity integral: ρ = ∫ mR(τ) × q(s,τ) dτ
         
-        This is just a simple integration of the product mR × q!
+        This includes:
+        1. Pre-existing homeostatic material (τ <= 0, "founding cohort")
+        2. Newly deposited material (τ > 0)
         
         Args:
             mR_history: Production rate history [mR(τ_min), ..., mR(s)]
@@ -372,21 +379,37 @@ class Kinetics:
             dt: Time step size
             current_timestep: Current time s
             integration_method: Integration method ('simpson' or 'trapezoidal')
+            rhoR_alpha_homeostatic: Homeostatic mass density
             
         Returns:
             Mass density rhoR_alpha
         """
-        # Form product mR × q
+        
+        # STEP 1: Compute contribution from newly deposited material (τ > tau_min)
+        # Form product mR × q for new material
         mq_values = [mR_history[tau_min + i] * q_values[i] 
                      for i in range(len(q_values))]
         
         n_points = len(mq_values)
         
+        # TODO: add tau_min dependency
         integrator = IntegratorFactory.create(
             integration_method, dt, n_points - 1, 0
         )
         
-        return integrator.integrate(mq_values)
+        rhoR_deposited = integrator.integrate(mq_values)
+        
+        # STEP 2: Add contribution from pre-existing homeostatic material (τ <= 0)
+        # This material was present at t=0 and survives with q(s, -∞)
+        if tau_min == 0:
+            q_initial = q_values[0]  
+            rhoR_initial = rhoR_alpha_homeostatic * q_initial
+        else:
+            rhoR_initial = 0.0
+        
+        rhoR_alpha = rhoR_initial + rhoR_deposited
+
+        return rhoR_alpha
     
     @classmethod
     def from_parameters(cls, params):

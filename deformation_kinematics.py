@@ -1,7 +1,7 @@
 import math
 import numpy as np
 from abc import ABC, abstractmethod
-from typing import Dict, Tuple
+from typing import Dict, List, Optional, Tuple
 import numpy as np
 from enum import Enum
 from tensor_operations import TensorOperations
@@ -130,13 +130,6 @@ class DeformationKinematics(ABC):
         """
         return self.tensor_ops.green_strain(F)
     
-    def compute_almansi_strain(self, F: np.ndarray) -> np.ndarray:
-        """Compute Almansi strain e = 0.5 (I - B^{-1})."""
-        B = self.compute_left_cauchy_green(F)
-        I = np.eye(F.shape[0])
-        B_inv = np.linalg.inv(B)
-        return 0.5 * (I - B_inv)
-    
     def compute_invariants(self, F: np.ndarray) -> Tuple[float, float, float]:
         """Compute strain invariants I1, I2, I3 from F.
         
@@ -154,7 +147,32 @@ class DeformationKinematics(ABC):
         Delegates to TensorOperations.
         """
         return self.tensor_ops.jacobian(F)
-    
+
+    @abstractmethod
+    def compute_volume_ratio(
+        self,
+        F_history: List[np.ndarray],
+        rhoR_history: List[float],
+        rhoR_h: float,
+        timestep: int
+    ) -> float:
+        """Compute volume ratio J at specified timestep.
+        
+        Kinematics-specific logic determines whether to use:
+        - F (fundamental): J = det(F)
+        - Density (constraint): J = ρ_h / ρ
+        
+        Args:
+            F_history: Deformation gradient history
+            rhoR_history: Mass density history
+            rhoR_h: Homeostatic density
+            timestep: Target timestep
+            
+        Returns:
+            Volume ratio J
+        """
+        pass
+        
     def verify_incompressibility(
         self,
         F: np.ndarray,
@@ -189,6 +207,51 @@ class DeformationKinematics(ABC):
         """
         pass
 
+    @abstractmethod
+    def get_component_name(self, index: int) -> str:
+        """Get component name for tensor index.
+        
+        Maps tensor indices to coordinate system component names.
+        For example, cylindrical: 0→'r', 1→'theta', 2→'z'
+        
+        Args:
+            index: Tensor component index (0, 1, or 2)
+            
+        Returns:
+            Component name string
+            
+        Raises:
+            ValueError: If index out of range
+        """
+    pass
+
+    @abstractmethod
+    def get_equilibrium_variable(self) -> str:
+        #TODO: refactor this to a class?
+        """Get name of geometry variable to solve for in equilibrium.
+        
+        Different kinematics solve for different variables:
+        - Thin-wall: 'mid_radius'
+        - Thick-wall: 'inner_radius'
+        
+        Returns:
+            Variable name (string)
+        """
+        pass
+
+    @abstractmethod
+    def get_reference_geometry_value(self, layer) -> float:
+        """Get reference value for equilibrium variable (for bracketing).
+        
+        Typically the homeostatic value of the variable.
+        
+        Args:
+            layer: Layer object to get value from
+            
+        Returns:
+            Reference value (float, in meters)
+        """
+        pass
 
 # =============================================================================
 # THIN-WALL KINEMATICS (Current Implementation)
@@ -321,43 +384,54 @@ class ThinWallKinematics(DeformationKinematics):
     
     def compute_radial_stretch(
         self,
+        J: float,
         lambda_theta: float,
         lambda_z: float
     ) -> float:
-        """Compute radial stretch from incompressibility.
+        """Compute radial stretch from volume ratio.
         
-        λ_r = 1 / (λ_θ · λ_z)
+        λ_r = J / (λ_θ · λ_z)
         
         Args:
+            J: Volume ratio (-)
             lambda_theta: Circumferential stretch
             lambda_z: Axial stretch
             
         Returns:
             Radial stretch λ_r (-)
         """
-        return 1.0 / (lambda_theta * lambda_z)
+        #TODO: if J not provided, then calculate it here.
+        return J / (lambda_theta * lambda_z)
     
     def compute_thickness_from_incompressibility(
         self,
-        lambda_theta: float,
-        lambda_z: float,
-        H: float
+        J: float,
+        reference_thickness: float,
+        F: Optional[np.ndarray] = None,
+        lambda_theta: Optional[float] = None,
+        lambda_z: Optional[float] = None
     ) -> float:
-        """Compute current thickness from incompressibility.
+        """Compute current thickness from volume ratio.
         
-        From λ_r = H/h and λ_r = 1/(λ_θ · λ_z):
-        h = H · λ_r = H / (λ_θ · λ_z)
-        
-        Args:
-            lambda_theta: Circumferential stretch
-            lambda_z: Axial stretch
-            H: Reference thickness (m)
-            
-        Returns:
-            Current thickness h (m)
+        From λ_r = h/H and λ_r = J/(λ_θ · λ_z):
+        h = (J / (λ_θ · λ_z)) * H
         """
-        lambda_r = self.compute_radial_stretch(lambda_theta, lambda_z)
-        return H * lambda_r
+        # Extract stretches from F if provided (thin-wall: F is diagonal)
+        # TODO: use component recognition to get lambda_theta, lambda_z
+        if F is not None:
+            # For thin-wall, F is diagonal: [λ_r, λ_θ, λ_z]
+            lambda_theta = F[1, 1]
+            lambda_z = F[2, 2]
+        elif lambda_theta is not None and lambda_z is not None:
+            # Use provided stretches
+            pass
+        else:
+            raise ValueError(
+                "Must provide either F or both lambda_theta and lambda_z"
+            )
+        
+        h = (J / (lambda_theta * lambda_z)) * reference_thickness
+        return h
     
     def compute_all_kinematic_quantities(
         self,
@@ -532,13 +606,95 @@ class ThinWallKinematics(DeformationKinematics):
         return wss
 
     def compute_volume_ratio(
-        self, 
-        reference_density: float,
-        current_density: float
+        self,
+        F_history: List[np.ndarray],
+        rhoR_history: List[float],
+        rhoR_h: float,
+        timestep: int
     ) -> float:
-        """Compute J from incompressibility: J = rhoR / rhoR_h."""
-        return current_density / reference_density
-    
+        """Compute volume ratio for thin-wall kinematics.
+        
+        Strategy:
+        1. Simplified calculation from incompressibility: J = ρ_h / ρ 
+        2. Fallback to F-based: J = det(F) (if density not available)
+        
+        Args:
+            F_history: Deformation gradient history
+            rhoR_history: Mass density history
+            rhoR_h: Homeostatic density
+            timestep: Target timestep
+            
+        Returns:
+            Volume ratio J
+        """
+
+        # Try density first (if available)
+        if 0 <= timestep < len(rhoR_history):
+            rhoR = rhoR_history[timestep]
+            if not np.isnan(rhoR):
+                J = rhoR / rhoR_h
+                return  J
+
+        # Fallback to F
+        if 0 <= timestep < len(F_history):
+            F = F_history[timestep]
+            J = self.compute_jacobian(F)
+            return J
+            
+        # Neither available
+        raise ValueError(
+            f"Cannot compute J at timestep {timestep}: "
+            f"neither F nor density available"
+        )
+
+    def get_component_name(self, index: int) -> str:
+        """Get component name for given tensor index.
+        
+        For cylindrical coordinates:
+            0 → 'r' (radial)
+            1 → 'theta' (circumferential)
+            2 → 'z' (axial)
+        
+        Args:
+            index: Tensor component index (0, 1, or 2)
+            
+        Returns:
+            Component name string
+        """
+        component_names = ['r', 'theta', 'z']
+        if not (0 <= index < 3):
+            raise ValueError(f"Index {index} out of range [0, 2]")
+        return component_names[index]
+                
+    def compute_inner_radius(
+        self,
+        mid_radius: float,
+        thickness: float
+    ) -> float:
+        """Compute inner radius from mid-radius and thickness.
+        
+        For thin-wall cylinder:
+        r_mid = a + h/2
+        Therefore: a = r_mid - h/2
+        
+        Args:
+            mid_radius: Mid-wall radius (m)
+            thickness: Wall thickness (m)
+            
+        Returns:
+            Inner radius a (m)
+        """
+        #TODO: abstract to functions like update_geometry() that will be common across kinematics. Currently inner radius too specific?
+        return mid_radius - 0.5 * thickness
+
+    def get_equilibrium_variable(self) -> str:
+        """Thin-wall solves for mid_radius."""
+        return 'mid_radius'
+
+    def get_reference_geometry_value(self, layer) -> float:
+        #TODO: refactor
+        """Homeostatic mid_radius for bracketing."""
+        return layer.get_mid_radius(0)
 
 # =============================================================================
 # THICK-WALL KINEMATICS (Future Implementation)

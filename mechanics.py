@@ -175,6 +175,7 @@ class Mechanics:
     
     def compute_sigma_hat_alpha_for_cohort(
         self,
+        J: float,
         F_alpha: np.ndarray,
         S_hat_alpha: np.ndarray
     ) -> np.ndarray:
@@ -183,11 +184,12 @@ class Mechanics:
         This is the PUSH-FORWARD operation from PK2 to partial constituent stress.
         
         Formula:
-            σ̂_α = (1/J_α) F_α · S_hat_α · F_α^T
+            σ̂_α = (1/J_α) F_α · S_hat_α · F_α^T 
         
         where J_α = det(F_α)
         
         Args:
+            J: Layer volume ratio at current time J(s) = ρ_h/ρ(s)
             F_alpha: Deformation gradient for this cohort (3×3)
             S_hat_alpha: PK2 stress from constitutive model (3×3)
             
@@ -197,13 +199,14 @@ class Mechanics:
         # Compute sigma_hat
         # TODO: call constituent or kinematics function for volume ratio J_alpha calc
         # TODO: simplify calculation: J_alpha = J(s)/J(τ), from layer kinematics
-        J_alpha = np.linalg.det(F_alpha)
-        sigma_hat_alpha = (1.0 / J_alpha) * (F_alpha @ S_hat_alpha @ F_alpha.T)
+        # TODO: to understand why J_alpha = np.linalg.det(F_alpha). Add J tau back in.
+        sigma_hat_alpha = (1.0 / J) * (F_alpha @ S_hat_alpha @ F_alpha.T)
         
         return sigma_hat_alpha
     
     def compute_sigma_hat_alpha_for_all_cohorts(
         self,
+        J: float,
         F_alpha_cohorts: List[np.ndarray],
         S_hat_alpha_cohorts: List[np.ndarray]
     ) -> List[np.ndarray]:
@@ -212,6 +215,7 @@ class Mechanics:
         Reuses compute_sigma_hat_alpha_for_cohort() for each (F_α, S_hat_α) pair.
         
         Args:
+            J: Layer volume ratio at current time J(s) = ρ_h/ρ(s)
             F_alpha_cohorts: List of F_α matrices
             S_hat_alpha_cohorts: List of S_hat_α matrices
             
@@ -226,7 +230,7 @@ class Mechanics:
         sigma_hat_alpha_cohorts = []
         for F_alpha_tau, S_hat_alpha_tau in zip(F_alpha_cohorts, S_hat_alpha_cohorts):
             sigma_hat_alpha_tau = self.compute_sigma_hat_alpha_for_cohort(
-                F_alpha_tau, S_hat_alpha_tau
+                J, F_alpha_tau, S_hat_alpha_tau
             )
             sigma_hat_alpha_cohorts.append(sigma_hat_alpha_tau)
         
@@ -241,14 +245,19 @@ class Mechanics:
         sigma_hat_alpha_cohorts: List[np.ndarray],
         mR_alpha_history: List[float],
         survival_values: List[float],
-        rho_h: float,
+        rhoR_homeostatic: float,
         tau_min: int,
         current_timestep: int,
         dt: float,
-        integration_method: str
+        integration_method: str,
+        rhoR_alpha_homeostatic: float
     ) -> np.ndarray:
         """Integrate stress heredity integral: σ_α = ∫ (mR·q/ρ_h) · σ̂_α dτ.
         
+        This includes:
+        1. Initial material stress (τ <= 0, pre-existing at homeostasis)
+        2. Deposited material stress (τ > tau_min, tracked cohorts)
+
         This is a HELPER function called by Constituent after it has:
         1. Computed F_α for all cohorts
         2. Computed S_hat_α for all cohorts
@@ -258,19 +267,20 @@ class Mechanics:
             sigma_hat_alpha_cohorts: List [σ̂_α(τ_min), ..., σ̂_α(s)]
             mR_alpha_history: Production rate history [mR(τ_min), ..., mR(s)]
             survival_values: Survival function [q(s,τ_min), ..., q(s,s)]
-            rho_h: Homeostatic mass density (kg/m³)
+            rhoR_homeostatic: Homeostatic mass density (kg/m³)
             tau_min: Earliest deposition time
             current_timestep: Current time s
             dt: Time step size
             integration_method: Integration method ('simpson'/'trapezoidal')
+            rhoR_alpha_homeostatic: Homeostatic mass density 
             
         Returns:
             Total constituent stress σ_α (3×3)
         """
         # TODO: rename variables, remove len dependency?       
-        # Initialize stress accumulator
-        sigma_alpha = np.zeros((3, 3))
-        
+
+        # STEP 1: Integrate deposited material stress (τ >= tau_min)
+        sigma_deposited = np.zeros((3, 3))
         # Integrate each stress component [i,j]
         for i in range(3):
             for j in range(3):
@@ -282,7 +292,8 @@ class Mechanics:
                 for tau in range(tau_min, current_timestep+1):
                     
                     # Weight: (mR(τ) · q(s,τ)) / ρ_h
-                    weight = (mR_alpha_history[tau] * survival_values[tau]) / rho_h
+                    #TODO: to add J(tau) here
+                    weight = (mR_alpha_history[tau] * survival_values[tau]) / rhoR_homeostatic
                     
                     # Weighted stress component
                     weighted_stress_ij.append(
@@ -296,8 +307,26 @@ class Mechanics:
                     current_timestep,  # start
                     tau_min  # stop
                 )
-                sigma_alpha[i, j] = integrator.integrate(weighted_stress_ij)
-        
+                sigma_deposited[i, j] = integrator.integrate(weighted_stress_ij)
+
+        # STEP 2: Add initial material stress contribution (τ <= 0)
+        if tau_min == 0:            
+            q_initial = survival_values[0]  
+            weight_initial = (rhoR_alpha_homeostatic / rhoR_homeostatic) * q_initial
+            #TODO: potential source of errror?
+            sigma_initial = weight_initial * sigma_hat_alpha_cohorts[0]
+
+            # TODO: convert to DEBUG: Print initial material contribution
+            # print(f"        [InitialMaterial] q(s,0) = {q_initial:.6f}")
+            # print(f"        [InitialMaterial] rhoR_alpha_h = {rhoR_alpha_homeostatic:.2f} kg/m³")
+            # print(f"        [InitialMaterial] weight = {weight_initial:.6f}")
+            # print(f"        [InitialMaterial] sigma_initial[1,1] = {sigma_initial[1,1]/1000:.2f} kPa")
+            # print(f"        [InitialMaterial] sigma_deposited[1,1] = {sigma_deposited[1,1]/1000:.2f} kPa")
+        else:
+            sigma_initial = np.zeros((3, 3))
+
+        sigma_alpha = sigma_initial + sigma_deposited
+
         return sigma_alpha
     
     # =========================================================================
