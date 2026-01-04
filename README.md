@@ -10,7 +10,9 @@
 
 </div>
 
-svGrowth is a modular computational framework for simulating growth and remodeling (G&R) in biological tissues based on the constrained mixture theory. 
+<p style="text-align: center;"> svGrowth is a modular computational framework for simulating growth and remodeling (G&R) in biological tissues based on the constrained mixture theory. </p>
+
+<h1></h1>
 
 ### Key Features
 
