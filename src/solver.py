@@ -118,7 +118,7 @@ class LayerEquilibriumContext(SolverContext):
         # Get reference value from kinematics (for bracketing)
         self.reference_value = layer.kinematics.get_reference_geometry_value(layer)
     
-    def evaluate_objective(self, trial_value: float) -> float:
+    def evaluate_objective(self, trial_geometry_value: float) -> float:
         """Evaluate equilibrium residual.
         
         Args:
@@ -129,7 +129,7 @@ class LayerEquilibriumContext(SolverContext):
             Residual: σ_θθ(mixture) - σ_θθ(theoretical)
         """
         return self.layer.compute_equilibrium_residual(
-            trial_value,
+            trial_geometry_value,
             self.timestep,
             self.dt,
             self.integration_method,
@@ -173,7 +173,7 @@ class Solver:
     
     def __init__(self, 
                  method: str = 'brentq', 
-                 tolerance: float = 1e-5, 
+                 tolerance: float = 1e-12, 
                  max_iterations: int = 100):
         """Initialize solver with method and tolerances.
         
@@ -254,8 +254,8 @@ class Solver:
                 objective,
                 bracket=[lower, upper],
                 method=self.method,
-                xtol=self.tolerance,
-                maxiter=self.max_iterations
+                rtol=self.tolerance, #TODO: expose to yaml file
+                maxiter=self.max_iterations #TODO: expose to yaml file
             )
             
             if verbose:

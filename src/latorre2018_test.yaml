@@ -45,14 +45,6 @@ layers:
         type: "latorre2018"
         perturbation_time: 10.0
       
-      flow_rate:
-        type: "latorre2018"
-        perturbation_time: 10.0
-
-      axial_stretch:
-        type: "latorre2018"
-        perturbation_time: 10.0
-
     # --------------------------------------------------------------------------
     # Geometry
     # --------------------------------------------------------------------------

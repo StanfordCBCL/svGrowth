@@ -5,13 +5,13 @@ simulation:
   simulation_name: "latorre2018"
   output_directory: "outputdir"
   n_days: 701.0
-  dt: 1                      # days
+  dt: 0.5                      # days
   tolerance: 1e-12
   max_iterations: 50
 
   # Numerical methods
-  integration_method: "trapezoidal"                  # For heredity integrals (trapezoidal, simpson)
-  survival_function_computation: "naive"         # For survival function (naive, backward) # TODO: revised naming
+  integration_method: "simpson"                  # For heredity integrals (trapezoidal, simpson)
+  survival_function_computation: "backward"         # For survival function (naive, backward) # TODO: revised naming
   
   verbose: true
 
@@ -42,23 +42,23 @@ layers:
     perturbations:
       pressure:
         type: "latorre2018"
-        perturbation_time: 10.0
+        perturbation_time: 140.0
       
       flow_rate:
         type: "latorre2018"
-        perturbation_time: 10.0
+        perturbation_time: 140.0
 
       axial_stretch:
         type: "latorre2018"
-        perturbation_time: 10.0
+        perturbation_time: 140.0
 
     # --------------------------------------------------------------------------
     # Geometry
     # --------------------------------------------------------------------------
     geometry:
       type: "thin_wall_cylinder"
-      a_h: 1.3992742819520572                  # mm (homeostatic inner radius)
-      h_h: 0.12005731981644589                  # mm (homeostatic wall thickness)
+      a_h: 1.4                  # mm (homeostatic inner radius)
+      h_h: 0.12                 # mm (homeostatic wall thickness)
       lambda_z_h: 1.0            # dimensionless (homeostatic axial stretch)
     
     # --------------------------------------------------------------------------
@@ -143,81 +143,4 @@ layers:
               k_alpha_h: 0.1     # 1/day (homeostatic degradation rate)
               gain_params:
                 intramural_stress: 1.0
-
-      # ------------------------------------------------------------------------
-      # OPTIONAL: COLLAGEN - DIAGONAL FAMILIES (uncomment if needed)
-      # ------------------------------------------------------------------------
-      # - name: "collagen_diagonal_1"
-      #   mass_fraction: 0.055   # 25% of 0.22 total collagen
-      #   deposition_stretch: 1.08
-      #   
-      #   constitutive_model:
-      #     type: "fung_exponential"
-      #     isotropy: "anisotropic"
-      #     fiber_orientation: 45.0  # degrees
-      #     parameters:
-      #       c1: 400.0          # kPa
-      #       c2: 15.0           # dimensionless
-      #   
-      #   kinetics:
-      #     production:
-      #       stimulus_function_form: "linear"
-      #       gain_params:
-      #         intramural_stress: 1.0
-      #         wss: -0.5
-      #     
-      #     degradation:
-      #       survival_function_form: "exponential"
-      #       deg_rate:
-      #         type: "quadratic"
-      #         k_alpha_h: 0.1   # 1/day
-      #         gain_params:
-      #           intramural_stress: 1.0
-      # 
-      # - name: "collagen_diagonal_2"
-      #   mass_fraction: 0.055   # 25% of 0.22 total collagen
-      #   deposition_stretch: 1.08
-      #   
-      #   constitutive_model:
-      #     type: "fung_exponential"
-      #     isotropy: "anisotropic"
-      #     fiber_orientation: -45.0  # degrees
-      #     parameters:
-      #       c1: 400.0          # kPa
-      #       c2: 15.0           # dimensionless
-      #   
-      #   kinetics:
-      #     production:
-      #       stimulus_function_form: "linear"
-      #       gain_params:
-      #         intramural_stress: 1.0
-      #         wss: -0.5
-      #     
-      #     degradation:
-      #       survival_function_form: "exponential"
-      #       deg_rate:
-      #         type: "quadratic"
-      #         k_alpha_h: 0.1   # 1/day
-      #         gain_params:
-      #           intramural_stress: 1.0
-
-  # ----------------------------------------------------------------------------
-  # Future: Layer 2 - Adventitia (when implementing multi-layer models)
-  # ----------------------------------------------------------------------------
-  # - layer_name: "adventitia"
-  #   rhoR_h: 1050.0
-  #   
-  #   loading_variables:
-  #     P_h: 0.0               # No intramural pressure (external layer)
-  #     Q_h: 0.0
-  #     blood_viscosity: 0.004
-  #   
-  #   geometry:
-  #     type: "thin_wall_cylinder"
-  #     a_h: 1.52              # Starts at media's outer radius
-  #     h_h: 0.08
-  #     lambda_z_h: 1.0
-  #   
-  #   constituents:
-  #     - name: "collagen_adventitial"
-  #       # ... adventitial collagen properties ...
+                

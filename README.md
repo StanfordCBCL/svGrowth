@@ -1,6 +1,16 @@
-# svGrowth
+<div align="center">
 
-A constrained mixture model framework for simulating growth and remodeling (G&R) in biological tissues, with a focus on arterial and venous wall mechanics.
+<p align="center">
+  <img src="docs/svGrowth_prelim_logo.png" width="200">
+</p>
+
+[![Test Status](https://github.com/StanfordCBCL/svGrowth/actions/workflows/test.yml/badge.svg)](https://github.com/StanfordCBCL/svGrowth/actions/workflows/test.yml)
+[![codecov](https://codecov.io/gh/StanfordCBCL/svGrowth/branch/main/graph/badge.svg)](https://codecov.io/gh/StanfordCBCL/svGrowth)
+![Platform](https://img.shields.io/badge/platform-macOS%20|%20Ubuntu-blue)
+
+</div>
+
+A modular computational framework for simulating growth and remodeling (G&R) in biological tissues based on the constrained mixture theory. 
 
 ## Overview
 

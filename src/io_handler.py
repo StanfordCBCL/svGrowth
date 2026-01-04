@@ -91,7 +91,7 @@ class IOHandler:
         filepath = self.output_dir / f'constituent_{safe_name}.csv'
         file_handle = open(filepath, 'w', newline='')
         
-        headers = ['time', 'rho_alpha', 'k_alpha', 'mR_alpha', 'stress_r', 'stress_theta', 'stress_z', 
+        headers = ['time', 'rho_alpha', 'k_alpha', 'mR_alpha', 'stimulus_function', 'stress_r', 'stress_theta', 'stress_z', 
                 'sigma_hat_r', 'sigma_hat_theta', 'sigma_hat_z', 'sigma_hat_act', 'a_act']
         writer = csv.DictWriter(file_handle, fieldnames=headers)
         writer.writeheader()

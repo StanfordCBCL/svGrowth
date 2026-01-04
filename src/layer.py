@@ -290,7 +290,12 @@ class Layer:
         """Get homeostatic thickness."""
         self._ensure_homeostatic_initialized()
         return self.homeostatic_thickness
-    
+
+    def get_homeostatic_mid_radius(self) -> float:
+        """Get homeostatic mid-radius."""
+        self._ensure_homeostatic_initialized()
+        return self.homeostatic_mid_radius
+
     def get_homeostatic_axial_stretch(self) -> float:
         """Get homeostatic axial stretch."""
         self._ensure_homeostatic_initialized()
@@ -661,7 +666,7 @@ class Layer:
 
     def compute_all_stress(self, target_timestep: int, dt: float,
                       integration_method: str,
-                      survival_function_computation: str) -> None:
+                      survival_function_computation: str) -> np.ndarray:  
         """Compute total layer stress from constituent heredity integrals.
 
         Algorithm:
@@ -725,6 +730,8 @@ class Layer:
         # Verify constraint satisfaction (for thin-wall: σ_r should be ≈0)
         if abs(sigma[0, 0]) > 1e-6:
             print(f"    WARNING: Radial stress not zero! σ_r = {sigma[0,0]:.2e} Pa")
+            
+        return sigma
 
     def compute_homeostatic_stress_direct(self) -> None:
         """Compute homeostatic stress directly from constituent properties.
@@ -1010,26 +1017,27 @@ class Layer:
         self.update_geometry_from_trial(
             trial_value, 
             timestep, 
-            geometry_variable=self.kinematics.get_equilibrium_variable()
+            trial_geometry_variable=self.kinematics.get_equilibrium_variable()
         )
         
         # STEP 2: Update WSS (depends on inner radius)
         self.update_wss(timestep)
         
         # STEP 3: Compute mixture stress from constituents
-        self.compute_all_stress(
+        sigma_mixture =self.compute_all_stress(
             timestep, dt, integration_method, survival_function_computation
         )
-        
+        sigma_theta_mixture = sigma_mixture[1, 1]  # Circumferential component
+
         # STEP 4: Compute theoretical stress from equilibrium
         P = self.get_pressure(timestep)  
         a = self.get_inner_radius(timestep)
         h = self.get_thickness(timestep)
+        
         sigma_theoretical = self.kinematics.compute_stress_from_equilibrium(P, a, h)
         
-        # STEP 5: Compute residual
-        sigma_mixture = self.get_stress(timestep)
-        sigma_theta_mixture = sigma_mixture[1, 1]  # Circumferential component
+        # print(f"    [RESIDUAL DEBUG] σ_theoretical = {sigma_theoretical:.2f} Pa, σ_mixture = {sigma_theta_mixture:.2f} Pa")
+        # print(f"    [RESIDUAL DEBUG] Residual = {sigma_theta_mixture - sigma_theoretical:.2f} Pa")
         
         return sigma_theta_mixture - sigma_theoretical     
 
@@ -1041,7 +1049,7 @@ class Layer:
         integration_method: str,
         survival_function_computation: str,
         solver_method: str = 'brentq',
-        tolerance: float = 1e-5,
+        tolerance: float = 1e-12,
         verbose: bool = False
     ) -> dict:
         """Solve for equilibrium geometry where mixture stress = theoretical stress.
@@ -1095,32 +1103,50 @@ class Layer:
     
     def update_geometry_from_trial(
         self,
-        trial_geometry_value: float,
+        trial_value: float, # this is trial mid_radius value # TODO: rename to trial_geometry_value
         timestep: int,
-        geometry_variable: str = 'mid_radius'
+        trial_geometry_variable: str = 'mid_radius'
     ) -> None:
         """Step 1: Update geometry based on trial value.
         
         Delegates to kinematics for geometry computation.
         """
-        if geometry_variable == 'mid_radius':
+        if trial_geometry_variable == 'mid_radius':
+            # TODO: couple to deformation kinematics to generalize to other geometries eg thick wall or 3D
+            # Update stretches from trial mid_radius
+            homeostatic_mid_radius = self.get_homeostatic_mid_radius()
+            lambda_theta_trial = trial_value / homeostatic_mid_radius
+            lambda_z = self.get_axial_stretch(timestep)
             J = self.get_volume_ratio(timestep)
-            F = self.get_deformation_gradient(timestep)
+            lambda_r_trial = self.kinematics.compute_radial_stretch(
+                J=J,
+                lambda_theta=lambda_theta_trial,
+                lambda_z=lambda_z
+            )
+
+            # Update thickness and inner radius from trial mid_radius
             h_h = self.get_homeostatic_thickness()
-            
             thickness = self.kinematics.compute_thickness_from_incompressibility(
-                J=J, reference_thickness=h_h, F=F
+                J=J, reference_thickness=h_h, lambda_theta=lambda_theta_trial, lambda_z=lambda_z
             )
             inner_radius = self.kinematics.compute_inner_radius(
-                trial_geometry_value, thickness
+                mid_radius=trial_value,
+                thickness=thickness
             )
-            
+
+            # Update geometry histories
+            self.mid_radius_history[timestep] = trial_value
             self.inner_radius_history[timestep] = inner_radius
             self.thickness_history[timestep] = thickness
-            self.mid_radius_history[timestep] = trial_geometry_value
+
+            # Update deformation gradient from trial mid_radius
+            F_trial = np.diag([lambda_r_trial, lambda_theta_trial, lambda_z])
+            self.F_history[timestep] = F_trial
+            #self.update_deformation_gradient(timestep)
+
         else:
             raise NotImplementedError(
-                f"Geometry variable '{geometry_variable}' not supported"
+                f"Geometry variable '{trial_geometry_variable}' not supported"
             )            
 
     def update_deformation_gradient(self, timestep: int) -> None:

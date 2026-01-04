@@ -10,3 +10,34 @@ Ramachandra2015-2017/Matlab/command_lines.txt
 Ramachandra2015-2017/Matlab/test.m
 /dev
 /venv
+/outputs
+/plotting
+
+# Testing
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg

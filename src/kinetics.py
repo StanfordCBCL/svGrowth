@@ -275,22 +275,23 @@ class LinearProductionRate(ProductionRateFunction):
         m_base = rhoR_alpha * k_alpha
         
         # Modulation factor
-        gamma = 1.0
+        stimulus_function = 1.0
         
         # Add contribution from each stimulus
+        #TODO: streamline to function: compute_stimulus_function
         for stimulus_name, K_value in self.gain_params.items():
             try:
                 current = context.get_stimulus(stimulus_name, current_timestep)
                 homeostatic = context.get_stimulus_homeostatic(stimulus_name)
                 
                 delta = _compute_delta(current, homeostatic)
-                gamma += K_value * delta
+                stimulus_function += K_value * delta
                 
             except KineticsDataNotAvailableError as e:
                 print(f"[ERROR] Stimulus '{stimulus_name}' not available: {e}")
                 pass
             
-        return m_base * gamma
+        return m_base * stimulus_function, stimulus_function
 
     #TODO: return the closed form solution of production rate
     # def __repr__(self):

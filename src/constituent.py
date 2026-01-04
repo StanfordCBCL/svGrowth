@@ -42,6 +42,7 @@ class Constituent(ABC):
         self.survival_history = [] # List of survival fractions over time (for each cohort)
         self.k_alpha_history = []  # List of degradation rates of survival function over time
         self.mR_alpha_history = []  # List of production rates over time
+        self.stimulus_function_history = []  # List of stimulus function values over time #TODO: only stored for plot currently, streamline with Plotting class
 
         self.F_alpha_history: List[List[np.ndarray]] = []
         self.sigma_hat_history: List[List[np.ndarray]] = []  # List of constituent-based partial stress over time TODO: perhaps make temporary array?
@@ -208,7 +209,7 @@ class SingleConstituent(Constituent):
         """Initialize deposition stretch tensor G_α from YAML input.
         
         Supports three input formats:
-        1. Scalar (isotropic): deposition_stretch: 1.40
+        1. Scalar (isotropic): deposition_stretch: 1.40 #TODO: correct
         → G_α = 1.40 · I
         
         2. List (anisotropic diagonal): deposition_stretch: [1.2, 1.5, 1.1]
@@ -278,7 +279,7 @@ class SingleConstituent(Constituent):
                 f"{self.deposition_stretch[1,1]:.2f}, {self.deposition_stretch[2,2]:.2f})")
             
         else:
-            # MODE 1: ISOTROPIC 3D DEPOSITION
+            # MODE 1: ISOTROPIC 3D DEPOSITION #TODO: rename
             # Incompressibility: λ_r · λ_θ · λ_z = 1
             # If λ_θ = λ_z = λ, then λ_r = 1/λ²
             lambda_r = 1.0 / (self.deposition_stretch_scalar ** 2)
@@ -309,6 +310,7 @@ class SingleConstituent(Constituent):
         # Initialize kinetics histories with t=0 values
         self.k_alpha_history.append(k_alpha_h)
         self.mR_alpha_history.append(mR_alpha_h)
+        self.stimulus_function_history.append(1.0) #TODO: compute from kinetics instead of hardcode
         
         # Initialize survival history
         # At t=0, we have one cohort deposited at τ=0 with q(0,0) = 1.0
@@ -471,8 +473,9 @@ class SingleConstituent(Constituent):
         # TODO: improve fail-safe if we don't have a guess for rhoR_alpha.
         # Consider how this interacts with guess_rhoR_alpha (which is needed for this step).
         rhoR_alpha = self.get_rhoR_alpha(target_timestep) # comes from guess
-        mR_alpha = self.kinetics.compute_production_rate(context, target_timestep, k_alpha, rhoR_alpha)
+        mR_alpha, stimulus_function = self.kinetics.compute_production_rate(context, target_timestep, k_alpha, rhoR_alpha)
         self._update_history(self.mR_alpha_history, target_timestep, mR_alpha)
+        self._update_history(self.stimulus_function_history, target_timestep, stimulus_function)
 
         # STEP 3: Compute survival function q(s, tau) for all cohorts
         survival_values = self.kinetics.compute_survival_function(
@@ -790,6 +793,11 @@ class SingleConstituent(Constituent):
         else:
             data['mR_alpha'] = None
         
+        if hasattr(self, 'stimulus_function_history') and len(self.stimulus_function_history) > timestep:
+            data['stimulus_function'] = self.stimulus_function_history[timestep]
+        else:
+            data['stimulus_function'] = None
+
         # Add stress if available
         # TODO: streamline with a loop
         if len(self.stress_history) > timestep:
@@ -818,7 +826,91 @@ class SingleConstituent(Constituent):
             data['sigma_hat_act'] = None
 
         return data
-    
+
+    # Add this to constituent.py to enable detailed logging
+
+    def log_kinetics_iteration(self, timestep, iteration, output_file="debug_kinetics.csv"):
+        """Log detailed kinetics state for debugging."""
+        import csv
+        import os
+        
+        # Create header if file doesn't exist
+        file_exists = os.path.exists(output_file)
+        
+        with open(output_file, 'a', newline='') as f:
+            fieldnames = [
+                'timestep', 'iteration', 'constituent',
+                'sigma_current', 'sigma_h', 'delta_sigma',
+                'wss_current', 'wss_h', 'delta_wss',
+                'K_sigma_p', 'K_wss_p', 'K_sigma_d', 'K_wss_d',
+                'upsilon_p', 'upsilon_d',
+                'k_alpha_h', 'k_alpha', 'rhoR_alpha', 'mR_alpha',
+                'stimulus_function',
+                'a_mid', 'h', 'P', 'Q'
+            ]
+            
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            
+            if not file_exists:
+                writer.writeheader()
+            
+            # Gather data
+            try:
+                context = self.kinetics_context
+                sigma_current = context.get_stimulus('intramural_stress', timestep)
+                sigma_h = context.get_stimulus_homeostatic('intramural_stress')
+                wss_current = context.get_stimulus('wss', timestep)
+                wss_h = context.get_stimulus_homeostatic('wss')
+            except:
+                sigma_current = sigma_h = wss_current = wss_h = 0.0
+            
+            delta_sigma = (sigma_current / sigma_h - 1.0) if sigma_h > 0 else 0.0
+            delta_wss = (wss_current / wss_h - 1.0) if wss_h > 0 else 0.0
+            
+            # Get gains
+            prod_gains = self.kinetics.production_function.gain_params if hasattr(self.kinetics, 'production_function') else {}
+            deg_gains = self.kinetics.degradation_function.gain_params if hasattr(self.kinetics, 'degradation_function') else {}
+            
+            K_sigma_p = prod_gains.get('intramural_stress', 0.0)
+            K_wss_p = prod_gains.get('wss', 0.0)
+            K_sigma_d = deg_gains.get('intramural_stress', 0.0)
+            K_wss_d = deg_gains.get('wss', 0.0)
+            
+            upsilon_p = 1.0 + K_sigma_p * delta_sigma + K_wss_p * delta_wss
+            upsilon_d = 1.0 + K_sigma_d * (delta_sigma ** 2) + K_wss_d * (delta_wss ** 2)
+            
+            k_alpha = self.k_alpha_history[timestep] if timestep < len(self.k_alpha_history) else 0.0
+            rhoR_alpha = self.rhoR_alpha_history[timestep] if timestep < len(self.rhoR_alpha_history) else 0.0
+            mR_alpha = self.mR_alpha_history[timestep] if timestep < len(self.mR_alpha_history) else 0.0
+            stimulus = self.stimulus_function_history[timestep] if timestep < len(self.stimulus_function_history) else 0.0
+            
+            writer.writerow({
+                'timestep': timestep,
+                'iteration': iteration,
+                'constituent': self.name,
+                'sigma_current': sigma_current,
+                'sigma_h': sigma_h,
+                'delta_sigma': delta_sigma,
+                'wss_current': wss_current,
+                'wss_h': wss_h,
+                'delta_wss': delta_wss,
+                'K_sigma_p': K_sigma_p,
+                'K_wss_p': K_wss_p,
+                'K_sigma_d': K_sigma_d,
+                'K_wss_d': K_wss_d,
+                'upsilon_p': upsilon_p,
+                'upsilon_d': upsilon_d,
+                'k_alpha_h': self.k_alpha_h,
+                'k_alpha': k_alpha,
+                'rhoR_alpha': rhoR_alpha,
+                'mR_alpha': mR_alpha,
+                'stimulus_function': stimulus,
+                'a_mid': self.layer.a_mid_history[timestep] if hasattr(self.layer, 'a_mid_history') else 0.0,
+                'h': self.layer.h_history[timestep] if hasattr(self.layer, 'h_history') else 0.0,
+                'P': self.layer.P if hasattr(self.layer, 'P') else 0.0,
+                'Q': self.layer.Q if hasattr(self.layer, 'Q') else 0.0,
+            })
+
 class MultiFiberFamilyConstituent(Constituent):
     #TODO: To clean up after code works with single constituent.
     """Multi-fiber family constituent (e.g., collagen with multiple orientations)."""

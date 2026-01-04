@@ -60,7 +60,7 @@ class TrapezoidIntegrator(Integrator):
         Raises:
             ValueError: If fewer than two points are available.
         """
-        n = self.start - self.stop + 1 
+        n = (self.start - self.stop)/self.dt + 1 
         if n < 2:
             raise ValueError("At least two points are required for trapezoidal integration.")
 
@@ -145,7 +145,7 @@ class SimpsonIntegrator(Integrator):
         Raises:
             ValueError: If fewer than two points are available.
         """
-        n = self.start - self.stop + 1 # number of integration points
+        n = (self.start - self.stop)/self.dt + 1  # number of integration points
 
         if n < 2:
             raise ValueError("At least two points required for integration with Simpson's rule.")
@@ -407,6 +407,7 @@ class BackwardSurvivalFunctionComputation(SurvivalFunctionComputation):
             return q_values
         
         # Choose algorithm based on integrator method
+        # TODO: get rid of string check
         if integrator_method == 'simpson':
             return self._compute_backward_simpson(
                 k_alpha_history, tau_min, dt, s, n_cohorts, q_values
@@ -434,6 +435,7 @@ class BackwardSurvivalFunctionComputation(SurvivalFunctionComputation):
             tau = tau_min + i
             
             # Integrate single interval [τ, τ+1]
+            #TODO: stop using 'trapezoidal' to create object.
             integrator = IntegratorFactory.create('trapezoidal', dt, tau + 1, tau)
             integral = integrator.integrate(k_alpha_history)
             
@@ -472,7 +474,10 @@ class BackwardSurvivalFunctionComputation(SurvivalFunctionComputation):
                 q[1] = exp(-∫Trap[1→2])     ← 2nd order (midpoint)
         """
         even_n = (n_cohorts % 2 == 0)
+
+        # Track the reference point for incremental computation
         tau_ref = s
+        q_ref = 1.0
         idx = n_cohorts - 1
         
         # Process pairs of intervals
@@ -481,15 +486,16 @@ class BackwardSurvivalFunctionComputation(SurvivalFunctionComputation):
             # Compute midpoint q(s, τ) using trapezoidal [τ, τ_ref]
             integrator_mid = IntegratorFactory.create('trapezoidal', dt, tau_ref, tau)
             integral_mid = integrator_mid.integrate(k_alpha_history)
-            q_values[idx - 1] = math.exp(-integral_mid)
+            q_values[idx - 1] = math.exp(-integral_mid) * q_ref
             
             # Compute reference q(s, τ-1) using Simpson's [τ-1, τ_ref]
             integrator_old = IntegratorFactory.create('simpson', dt, tau_ref, tau - 1)
             integral_old = integrator_old.integrate(k_alpha_history)
-            q_values[idx - 2] = math.exp(-integral_old)
+            q_values[idx - 2] = math.exp(-integral_old) * q_ref
             
             # Shift reference
             tau_ref = tau - 1
+            q_ref = q_values[idx - 2]
             idx -= 2
             tau -= 2
         
@@ -497,7 +503,7 @@ class BackwardSurvivalFunctionComputation(SurvivalFunctionComputation):
         if even_n:
             integrator = IntegratorFactory.create('trapezoidal', dt, tau_ref, tau_min)
             integral = integrator.integrate(k_alpha_history)
-            q_values[0] = math.exp(-integral)
+            q_values[0] = math.exp(-integral) * q_ref
         
         return q_values
 

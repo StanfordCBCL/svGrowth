@@ -12,8 +12,8 @@ class Simulation:
                  n_steps=100, 
                  tolerance=1e-12, 
                  max_iterations=50, 
-                 integration_method='trapezoidal',
-                 survival_function_computation='backward',  
+                 integration_method='simpson',
+                 survival_function_computation='naive',  
                  verbose=False,
                  detail_level=None,
                  debug_level=None):
@@ -54,6 +54,7 @@ class Simulation:
             next_timestep = self.current_timestep + 1
             time = next_timestep * self.dt
             print(f"Advancing from timestep {self.current_timestep} to {next_timestep}")
+            
             self.configuration.apply_perturbations(next_timestep, time)           
             # ========================================================================
             # STEP 1: Initial Guesses
@@ -138,8 +139,8 @@ class Simulation:
                     dt=self.dt,
                     integration_method=self.integration_method,
                     survival_function_computation=self.survival_function_computation,
-                    solver_method='bisect',
-                    tolerance=1e-3,
+                    solver_method='brentq', # exposure to yaml file
+                    tolerance=1e-5, # exposure to yaml file
                     verbose=self.verbose
                 )
                 
