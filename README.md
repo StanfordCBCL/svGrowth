@@ -4,7 +4,7 @@
   <img src="docs/svGrowth_prelim_logo.png" width="200">
 </p>
 
-[![Test Status](https://github.com/StanfordCBCL/svGrowth/actions/workflows/test.yml/badge.svg)](https://github.com/StanfordCBCL/svGrowth/actions/workflows/test.yml)
+[![Test Status](https://github.com/StanfordCBCL/svGrowth/actions/workflows/test.yaml/badge.svg)](https://github.com/StanfordCBCL/svGrowth/actions/workflows/test.yaml)
 [![codecov](https://codecov.io/gh/StanfordCBCL/svGrowth/branch/main/graph/badge.svg)](https://codecov.io/gh/StanfordCBCL/svGrowth)
 ![Platform](https://img.shields.io/badge/platform-macOS%20|%20Ubuntu-blue)
 
