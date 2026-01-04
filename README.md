@@ -10,11 +10,7 @@
 
 </div>
 
-A modular computational framework for simulating growth and remodeling (G&R) in biological tissues based on the constrained mixture theory. 
-
-## Overview
-
-**svGrowth** implements a computational framework for modeling the evolution of soft biological tissues under mechanical stimuli. The code is based on the constrained mixture theory, where tissues are composed of multiple constituents (e.g., elastin, collagen, smooth muscle) that turnover at different rates and adapt to mechanical loading.
+svGrowth is a modular computational framework for simulating growth and remodeling (G&R) in biological tissues based on the constrained mixture theory. 
 
 ### Key Features
 

@@ -320,7 +320,7 @@ class Solver:
                 }
             
             # TODO: can implement analytical Jacobian here
-            # df_dx = context.evaluate_jacobian(x)
+            df_dx = context.evaluate_jacobian(x)
             
             if df_dx is None:
                 # Use finite differences
