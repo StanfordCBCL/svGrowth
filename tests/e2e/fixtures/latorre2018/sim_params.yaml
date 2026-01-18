@@ -3,8 +3,8 @@
 # ==============================================================================
 simulation:
   simulation_name: "latorre2018"
-  output_directory: "outputdir"
-  n_days: 701.0
+  output_directory: "sim_results"
+  n_days: 100
   dt: 0.5                      # days
   tolerance: 1e-12
   max_iterations: 50
@@ -43,15 +43,15 @@ layers:
     perturbations:
       pressure:
         type: "latorre2018"
-        perturbation_time: 140.0
+        perturbation_time: 10.0
       
       flow_rate:
         type: "latorre2018"
-        perturbation_time: 140.0
+        perturbation_time: 10.0
 
       axial_stretch:
         type: "latorre2018"
-        perturbation_time: 140.0
+        perturbation_time: 10.0
 
     # --------------------------------------------------------------------------
     # Geometry

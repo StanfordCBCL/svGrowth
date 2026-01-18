@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 from typing import Tuple, Optional
 from scipy.optimize import root_scalar
 import numpy as np
+from custom_logging import get_logger
 
 
 # =============================================================================
@@ -189,6 +190,7 @@ class Solver:
         self.method = method
         self.tolerance = tolerance
         self.max_iterations = max_iterations
+        self.logger = get_logger(__name__)
         
         # Validate method
         valid_methods = ['brentq', 'toms748', 'bisect', 'newton_fd']
@@ -225,9 +227,10 @@ class Solver:
         # Get search bounds
         lower, upper = context.get_search_bounds()
         
-        if verbose:
-            print(f"  Solver: {self.method}, bracket=[{lower:.6e}, {upper:.6e}]")
-        
+        self.logger.debug(
+            f"Solver: {self.method}, bracket=[{lower:.6e}, {upper:.6e}]"
+        )
+
         # Define objective function wrapper
         def objective(x):
             return context.evaluate_objective(x)
@@ -258,10 +261,11 @@ class Solver:
                 maxiter=self.max_iterations #TODO: expose to yaml file
             )
             
-            if verbose:
-                print(f"    Converged: x = {result.root:.6e}, "
-                      f"f(x) = {result.function_calls:.6e}, "
-                      f"iterations = {result.iterations}")
+            self.logger.debug(
+                f"Converged: x = {result.root:.6e}, "
+                f"f(x) = {result.function_calls:.6e}, "
+                f"iterations = {result.iterations}"
+            )
             
             return {
                 'solution': result.root,

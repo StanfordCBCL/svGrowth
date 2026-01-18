@@ -507,7 +507,8 @@ class SingleConstituent(Constituent):
         self,
         target_timestep: int,
         dt: float,
-        integration_method: str
+        integration_method: str,
+        survival_function_computation: str,
     ) -> float:
         """Compute active radius via heredity integral.
         
@@ -522,6 +523,7 @@ class SingleConstituent(Constituent):
             target_timestep: Current time s
             dt: Time step size (days)
             integration_method: Integration method ('simpson' or 'trapezoidal')
+            survival_function_computation: Survival strategy ('naive', 'backward')
             
         Returns:
             Active radius a_act (m)
@@ -553,7 +555,7 @@ class SingleConstituent(Constituent):
             dt=dt,
             current_timestep=target_timestep,
             integration_method=integration_method,
-            survival_function_computation='naive'  
+            survival_function_computation=survival_function_computation
         )
         
         self._update_history(self.active_survival_history, target_timestep, q_act_values)
@@ -739,7 +741,8 @@ class SingleConstituent(Constituent):
             a_act = self.compute_active_radius(
                 target_timestep,
                 dt,
-                integration_method
+                integration_method,
+                survival_function_computation 
             )
             
             # Compute σ̂_act (circumferential component only)

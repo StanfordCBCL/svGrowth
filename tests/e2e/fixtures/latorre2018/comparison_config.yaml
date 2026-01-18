@@ -1,0 +1,45 @@
+test_name: "Latorre et al. 2018"
+paper_reference: "https://doi.org/10.1002/zamm.201700302"
+
+# Variables to compare (maps output → reference column names)
+comparisons:
+  - output_file: "layer_cerebral_artery_ratios.csv"
+    reference_file: "groundtruth_data_ratios.csv"
+    variables:
+      - name: "a_ratio"
+        reference_name: "inner_radius"
+        tolerance:
+          relative: 0.02  
+      - name: "h_ratio"
+        reference_name: "thickness"
+        tolerance:
+          relative: 0.02
+      - name: "lambda_z_ratio"
+        reference_name: "axial_stretch"
+        tolerance:
+          relative: 0.00001
+  
+  - output_file: "constituent_smooth_muscle_cells_ratios.csv"
+    reference_file: "groundtruth_data_ratios.csv"
+    variables:
+      - name: "rho_alpha_ratio"
+        reference_name: "rhoR_smooth_muscle_cells"  # Map if names differ
+        tolerance:
+          relative: 0.02  
+  
+  - output_file: "constituent_collagen_circumferential_ratios.csv"
+    reference_file: "groundtruth_data_ratios.csv"
+    variables:
+      - name: "rho_alpha_ratio"
+        reference_name: "rhoR_collagen"
+        tolerance:
+          relative: 0.02
+      - name: "stimulus_function_ratio"
+        reference_name: "stimulus_function_collagen"  # Map if names differ
+        tolerance:
+          relative: 0.02  
+
+compare_time_range:
+  start: 0
+  end: 100
+  step: 1 

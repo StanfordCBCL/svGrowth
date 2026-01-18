@@ -77,7 +77,7 @@ class Mechanics:
         else:
             # General case: F_α = F(s) · F(τ)⁻¹ · G_α
             F_tau = context.get_deformation_gradient(deposition_timestep)
-            F_tau_inv = np.linalg.inv(F_tau)
+            F_tau_inv = TensorOperations.inverse(F_tau)
             F_alpha = F_current @ F_tau_inv @ G_alpha
         
         return F_alpha

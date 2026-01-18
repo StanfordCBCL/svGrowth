@@ -38,6 +38,7 @@ class IndentedLogger:
         Args:
             name: Logger name (typically __name__ from calling module)
         """
+        #TODO: consider adding log_level here?
         self.logger = logging.getLogger(name)
         self.indent_level = 0
     
@@ -101,7 +102,7 @@ class IndentedLogger:
     # Special formatting
     # ========================================================================
     
-    def section(self, title: str):
+    def section(self, title: str, log_level: str = 'INFO'):
         """Print section header with indentation.
         
         Args:
@@ -109,10 +110,14 @@ class IndentedLogger:
         """
         indent = '  ' * self.indent_level
         separator = '=' * 60
-        self.logger.info(f"\n{indent}{separator}")
-        self.logger.info(f"{indent}{title}")
-        self.logger.info(f"{indent}{separator}")
-    
+
+        # Check if the level would be logged
+        numeric_level = getattr(logging, log_level.upper(), logging.INFO)
+        if self.logger.isEnabledFor(numeric_level):
+            print(f"\n{indent}{separator}")
+            print(f"{indent}{title}")
+            print(f"{indent}{separator}")
+        
     # ========================================================================
     # Indentation control
     # ========================================================================
@@ -153,49 +158,69 @@ class IndentedLogger:
         return False  # Don't suppress exceptions
 
 
-def setup_logging(config_file: str = 'logging_config.yaml') -> None:
-    """Initialize logging system from YAML configuration file.
+def init_logging(log_level: str, config_file: str = 'logging_config.yaml') -> None:
+    """Initialize logging system with specified level.
     
-    Should be called once at application startup before any logging occurs.
-    Falls back to basic configuration if file is not found or invalid.
+    Sets up logging infrastructure from YAML config and configures the
+    root logger to use the specified level. Should be called once at
+    application startup before any logging occurs.
     
     Args:
-        config_file: Path to logging configuration YAML file
+        log_level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        config_file: Path to logging configuration YAML file (default: logging_config.yaml)
+        
+    Raises:
+        ValueError: If log_level is not a valid logging level
         
     Example:
-        >>> setup_logging('logging_config.yaml')
+        >>> init_logging('DEBUG')
         >>> logger = get_logger(__name__)
-        >>> logger.info("Application started")
+        >>> logger.debug("Debug message")  # Will be shown
+        
+        >>> init_logging('INFO')
+        >>> logger.debug("Debug message")  # Will NOT be shown
     """
+    # Validate log level
+    #TODO: move to input file validator?
+    valid_levels = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
+    log_level_upper = log_level.upper()
+    
+    if log_level_upper not in valid_levels:
+        raise ValueError(
+            f"Invalid log level: '{log_level}'. "
+            f"Must be one of: {', '.join(valid_levels)}"
+        )
+    
+    # Load logging infrastructure from YAML
     config_path = Path(config_file)
     
-    # Try to load from YAML config
     if config_path.exists():
         try:
             with open(config_path, 'r') as f:
                 config = yaml.safe_load(f)
                 logging.config.dictConfig(config['logging'])
             
-            # Log successful initialization
-            root_logger = logging.getLogger()
-            root_logger.info(f"✓ Logging initialized from {config_file}")
-            return
-            
         except Exception as e:
-            # Fall through to basic config if YAML is malformed
+            # Fall back to basic config if YAML is malformed
             print(f"⚠️  Error loading {config_file}: {e}")
+            print(f"⚠️  Using basic logging configuration")
+            logging.basicConfig(
+                level=logging.INFO,
+                format='%(message)s',
+                force=True
+            )
     else:
-        print(f"⚠️  {config_file} not found")
+        # YAML not found - use basic config
+        print(f"⚠️  {config_file} not found, using basic configuration")
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(message)s',
+            force=True
+        )
     
-    # Fallback: basic configuration
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(message)s',
-        force=True  # Override any existing config
-    )
-    
-    root_logger = logging.getLogger()
-    root_logger.warning("Using basic logging configuration")
+    # Set the root logger level (affects all loggers)
+    numeric_level = getattr(logging, log_level_upper)
+    logging.getLogger().setLevel(numeric_level)
 
 
 def get_logger(name: str) -> IndentedLogger:

@@ -2,9 +2,11 @@ from typing import List, Dict, Any, Optional
 from io_handler import IOHandler
 from layer import Layer
 from constituent import Constituent
+from custom_logging import get_logger 
 
 class Configuration:
     def __init__(self, params=None):
+        self.logger = get_logger(__name__)
         self.layers: List[Layer] = []
         self.params = params or {}
         
@@ -193,7 +195,7 @@ class Configuration:
             )
             
             if result['converged']:
-                print(f"  Layer '{layer.name}': ✓ Converged "
+                self.logger.debug(f"  Layer '{layer.name}': ✓ Converged "
                     f"(geometry={result['solution']*1000:.4f} mm, "
                     f"iterations={result['iterations']})")
             

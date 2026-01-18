@@ -1,6 +1,7 @@
 import os
 from configuration import Configuration
 from io_handler import IOHandler
+from custom_logging import get_logger
 
 class Simulation:
     def __init__(self, 
@@ -12,12 +13,15 @@ class Simulation:
                  n_steps=100, 
                  tolerance=1e-12, 
                  max_iterations=50, 
-                 integration_method='simpson',
-                 survival_function_computation='naive',  
+                 integration_method='trapezoidal',
+                 survival_function_computation='backward',  
                  verbose=False,
                  detail_level=None,
-                 debug_level=None):
-        
+                 log_level='INFO'):
+
+        # Setup logger for this class
+        self.logger = get_logger(__name__)
+
         self.configuration = configuration
         self.dt = dt
         self.n_steps = n_steps
@@ -26,7 +30,7 @@ class Simulation:
         self.integration_method = integration_method
         self.survival_function_computation = survival_function_computation
         self.verbose = verbose
-        
+        self.log_level = log_level
         self.current_timestep = 0  # Current timestep index (0 = initial/homeostatic state)
         
         # Simulation metadata (owned by Simulation)
@@ -36,7 +40,7 @@ class Simulation:
         # IO service (used by Simulation)
         self.io_handler = IOHandler(
             detail_level=detail_level,
-            debug_level=debug_level,
+            log_level=log_level,
             output_dir=output_directory
         )
         
@@ -47,14 +51,28 @@ class Simulation:
         """Run the complete G&R simulation."""
 
         self._setup_outputs()
-        
+
+        self.logger.info("Starting G&R simulation")
+        self.logger.info(f"Steps: {self.n_steps}, dt: {self.dt}")
+
+        # ========================================================================
+        # WRITE INITIAL STATE (t=0, homeostatic)
+        # ========================================================================
+        self.logger.section("TIMESTEP 0 (Homeostatic State)")
+        time_0 = 0
+        self._write_timestep_data(self.current_timestep, time_0)
+
+        # ========================================================================
+        # MARCH THROUGH TIME
+        # ========================================================================
         #TODO: refactor step vs current_timestep        
         for step in range(self.n_steps):
 
             next_timestep = self.current_timestep + 1
             time = next_timestep * self.dt
-            print(f"Advancing from timestep {self.current_timestep} to {next_timestep}")
-            
+
+            self.logger.section(f"TIMESTEP {next_timestep}/{self.n_steps}")  
+
             self.configuration.apply_perturbations(next_timestep, time)           
             # ========================================================================
             # STEP 1: Initial Guesses
@@ -174,16 +192,16 @@ class Simulation:
 
                 # (e) Check stopping criteria
                 if all_layers_converged:
-                    print(f"\n✓ Converged in {iteration} iteration(s)")
-                    print(f"  Max Δρ/ρ = {max_relative_change:.2e} < {self.tolerance:.2e}")
+                    self.logger.info(f"✓ Converged in {iteration} iteration(s)")
+                    self.logger.info(f"  Max Δρ/ρ = {max_relative_change:.2e} < {self.tolerance:.2e}")
                     converged = True
                     break
 
             # Check if we exceeded max iterations
             if not converged:
-                print(f"\n⚠️  Warning: Max iterations ({self.max_iterations}) reached")
-                print(f"   Max Δρ/ρ = {max_relative_change:.2e} > {self.tolerance:.2e}")
-                print(f"   Continuing to next timestep...")
+                    self.logger.warning(f"⚠️  Timestep {step+1} did not converge in {self.max_iterations} iterations")
+                    self.logger.warning(f"   Max Δρ/ρ = {max_relative_change:.2e} > {self.tolerance:.2e}")
+
             
             # (f) Write results for this timestep
             self._write_timestep_data(next_timestep, time)

@@ -20,6 +20,10 @@ coverage.xml
 htmlcov/
 .tox/
 
+# Profiling results
+benchmarks/results/*
+!benchmarks/results/.gitkeep
+
 # Python
 __pycache__/
 *.py[cod]

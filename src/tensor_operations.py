@@ -7,15 +7,26 @@ from typing import Tuple
 # =============================================================================
 
 class TensorOperations:
-    """Pure NumPy tensor operations.
-    
-    These are the building blocks used throughout the code.
+    """Tensor operations for 3x3 matrices using NumPy.
     """
 
     @staticmethod
-    def inverse(A):
+    def is_diagonal_3x3(A: np.ndarray) -> bool:
+        """Check if 3x3 matrix is diagonal."""
+        return A[0, 1] == 0 and A[0, 2] == 0 and A[1, 0] == 0 and \
+               A[1, 2] == 0 and A[2, 0] == 0 and A[2, 1] == 0
+
+    @staticmethod
+    def inverse(A: np.ndarray) -> np.ndarray:
         """Compute inverse of 3x3 matrix."""
-        return np.linalg.inv(A)
+        if TensorOperations.is_diagonal_3x3(A):
+            inv_A = np.zeros((3, 3))
+            inv_A[0, 0] = 1.0 / A[0, 0]
+            inv_A[1, 1] = 1.0 / A[1, 1]
+            inv_A[2, 2] = 1.0 / A[2, 2]
+            return inv_A
+        else:
+            return np.linalg.inv(A)
     
     @staticmethod
     def trace(A: np.ndarray) -> float:

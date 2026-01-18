@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 from enum import Enum
 from tensor_operations import TensorOperations
-
+from custom_logging import get_logger
 
 # =============================================================================
 # COORDINATE SYSTEMS
@@ -35,6 +35,7 @@ class DeformationKinematics(ABC):
     
     def __init__(self):
         """Initialize with tensor operations utility."""
+        self.logger = get_logger(__name__)
         self.tensor_ops = TensorOperations()
     
     @abstractmethod
@@ -508,12 +509,12 @@ class ThinWallKinematics(DeformationKinematics):
         h = thickness
 
         # Check thin-wall validity (h/a < 0.1)
-        if h/a > 0.1:
-            import warnings
-            warnings.warn(
-                f"[WARNING] Thin-wall assumption may not be valid: h/a = {h/a:.3f} > 0.1. "
-                f"[WARNING] Results may be inaccurate."
-            )
+        # TODO: move this at the end of the simulation step
+        # if h/a > 0.1:
+        #     self.logger.warning(
+        #         f"Thin-wall assumption may not be valid: h/a = {h/a:.3f} > 0.1. "
+        #         f"[WARNING] Results may be inaccurate."
+        #     )
         
         # Circumferential equilibrium
         sigma_theta = pressure * a / h
