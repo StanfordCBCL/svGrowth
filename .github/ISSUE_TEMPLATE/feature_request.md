@@ -10,7 +10,7 @@ assignees: ''
 **Problem**
 Please provide a description of the problem the feature will address.
 
-** Solution**
+**Solution**
 Please provide a clear and concise description of the feature and how it should work.
 
 **Additional context**
