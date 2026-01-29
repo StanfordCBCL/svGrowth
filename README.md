@@ -12,6 +12,8 @@
 
 <p style="text-align: center;"> svGrowth is a modular computational framework for simulating growth and remodeling (G&R) in biological tissues based on the constrained mixture theory. </p>
 
+<p style="text-align: center;"> svGrowth is currently in development. </p>
+
 <h1></h1>
 
 ### Key Features
@@ -22,6 +24,14 @@
 - **Multiple integration methods**: Simpson's rule and trapezoidal integration
 - **Optimized survival computation**: O(n) backward iteration algorithm for efficient heredity integrals
 - **Modular architecture**: Clean separation between kinematics, mechanics, and kinetics
+
+
+### Code architecture
+
+<p align="center">
+  <img src="docs/svGrowth_architecture.png">
+</p>
+
 
 ## Installation
 

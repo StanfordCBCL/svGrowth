@@ -1,0 +1,76 @@
+================================================================================
+KINETICS.PY - Constituent Kinetics (Degradation, Survival, Production)
+================================================================================
+
+UTILITIES: MODULE-LEVEL HELPERS
+  - _compute_delta()            Compute deviation from homeostatic value
+
+--------------------------------------------------------------------------------
+
+DEGRADATION: RATE FUNCTIONS
+
+  ABSTRACT BASE CLASS: DegradationRateFunction
+    - compute_k_alpha()         Compute degradation rate at current timestep
+
+  CLASS: ConstantDegradationRate 
+    - __init__()                Initialize with constant degradation rate k_α_h
+    - compute_k_alpha()         Return constant k_α_h
+
+  CLASS: QuadraticDegradationRate 
+    - __init__()                Initialize with homeostatic rate and gain parameters
+    - compute_k_alpha()         Compute k_α = k_α_h × (1 + Σ K_i × δ_i²)
+
+--------------------------------------------------------------------------------
+
+SURVIVAL: FUNCTIONS
+
+  ABSTRACT BASE CLASS: SurvivalFunction
+    - compute_survival_function() Compute survival function q(s, τ) for all cohorts
+
+  CLASS: ExponentialSurvival 
+    - __init__()                Initialize with degradation function
+    - compute_survival_function() Compute q(s, τ) = exp(-∫[τ to s] k_α dt)
+
+--------------------------------------------------------------------------------
+
+PRODUCTION: RATE FUNCTIONS
+
+  ABSTRACT BASE CLASS: ProductionRateFunction
+    - compute_production_rate() Compute production rate at current timestep
+
+  CLASS: LinearProductionRate 
+    - __init__()                Initialize with gain parameters
+    - compute_production_rate() Compute mR_α = ρ_α × k_α × (1 + Σ K_i × δ_i)
+
+--------------------------------------------------------------------------------
+
+ORCHESTRATOR: MAIN KINETICS CLASS
+
+  CLASS: Kinetics
+
+    INITIALIZATION
+      - __init__()              Initialize with degradation, survival, and production functions
+
+    COMPUTATION: DEGRADATION
+      - compute_k_alpha()       Compute degradation rate at current timestep
+
+    COMPUTATION: PRODUCTION
+      - compute_production_rate() Compute production rate at current timestep
+
+    COMPUTATION: SURVIVAL
+      - compute_survival_function() Compute survival function q(s, τ) for all cohorts at current timestep s
+
+    COMPUTATION: HEREDITY INTEGRAL
+      - compute_heredity_integral() Compute heredity integral ρ = ∫ mR(τ) × q(s,τ) dτ
+
+    FACTORY METHODS
+      - from_parameters()       Create Kinetics from YAML parameters
+
+NOTES
+  - Handles all kinetics computations for constituent mass evolution
+  - Degradation: k_α(s) - rate at which material degrades
+  - Survival: q(s,τ) - fraction of cohort τ surviving to time s
+  - Production: mR_α(s) - rate of new material deposition
+  - Heredity integral: ρ_α(s) = ∫ mR(τ)·q(s,τ) dτ
+  - Supports stimulus-modulated degradation (quadratic) and production (linear)
+  - Modular design: swap degradation/survival/production implementations independently

@@ -1,0 +1,34 @@
+================================================================================
+CUSTOM_LOGGING.PY - Enhanced Logging with Indentation Support
+================================================================================
+
+MODULE FUNCTIONS
+  - init_logging()              Initialize logging system with specified level
+  - get_logger()                Get enhanced logger with indentation support
+
+CLASS: IndentedLogger
+  
+  LOGGING METHODS
+    - debug()                   Log debug message with indentation
+    - info()                    Log info message with indentation
+    - warning()                 Log warning with indentation
+    - error()                   Log error with indentation
+    - critical()                Log critical error with indentation
+  
+  FORMATTING METHODS
+    - section()                 Print section header with indentation
+  
+  INDENTATION CONTROL
+    - indent()                  Increase indentation level
+    - dedent()                  Decrease indentation level
+    - _format_msg()             Add indentation to message
+  
+  CONTEXT MANAGER
+    - __enter__()               Enter indented context (auto-indent)
+    - __exit__()                Exit indented context (auto-dedent)
+
+NOTES
+  - Provides indentation support for hierarchical logging
+  - Supports context manager for automatic indent/dedent
+  - Adds emoji prefixes for errors/warnings
+  - Clean integration with Python's standard logging module

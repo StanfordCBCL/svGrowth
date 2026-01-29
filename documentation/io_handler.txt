@@ -1,0 +1,41 @@
+================================================================================
+IO_HANDLER.PY - File Input/Output Operations
+================================================================================
+
+CLASS: IOHandler
+
+  INPUT: PARAMETER LOADING
+    - load_parameters()          Load parameters from YAML file
+    - apply_cli_overrides()      Apply command-line argument overrides to parameters
+
+  OUTPUT: PARAMETER SAVING
+    - save_parameters()          Save simulation parameters to output directory
+
+  OUTPUT: FILE SETUP
+    - setup_simulation_summary() Setup summary CSV file (always created)
+    - setup_layer_output()       Setup per-layer CSV file (always created)
+    - setup_constituent_output() Setup per-constituent CSV file (only if detail_level >= 1)
+    - setup_metadata_output()    Setup metadata JSON file
+
+  OUTPUT: DATA WRITING
+    - write_summary_row()        Write one row to summary CSV
+    - write_layer_row()          Write one row to layer CSV
+    - write_constituent_row()    Write one row to constituent CSV
+    - update_metadata()          Update metadata section
+    - write_metadata()           Write metadata to file
+
+  OUTPUT: FINALIZATION
+    - close_all()                Close all open file handles and write final metadata
+
+  UTILITIES: VALIDATION HELPERS
+    - _resolve_file_path()       Resolve file path to absolute path and verify it exists
+    - _check_file_extension()    Check that file has .yaml or .yml extension
+
+  INITIALIZATION
+    - __init__()                 Initialize IO handler
+    - set_output_dir()           Set output directory after initialization
+
+NOTES
+  - Handles all file I/O operations in the codebase
+  - Manages CSV writers for layers and constituents
+  - Supports different detail levels for outputs (0=basic, 1=detailed, 2=full) (TODO: to be revised)

@@ -1,0 +1,45 @@
+================================================================================
+CONFIGURATION.PY - Vessel Configuration Management
+================================================================================
+
+CLASS: Configuration
+
+  INITIALIZATION
+    - from_parameters()         Create and fully initialize Configuration from parameter dictionary
+    - _validate_parameters()    Validate input parameter file structure (TODO: to refactor)
+
+  CONFIGURATION: LAYER MANAGEMENT
+    - add_layer()               Add a layer to the configuration
+    - _enforce_layer_interactions() Enforce constraints between layers (contact, compatibility, etc.)
+
+  INITIAL GUESSES
+    - guess_geometry()          Guess geometry for all layers at target timestep
+    - guess_loading_variables() Guess loading variables for all layers at target timestep
+    - guess_stress_and_wss()    Guess stress and wall shear stress for all layers at target timestep
+    - guess_all_rhoR_alpha()    Guess mass densities for all constituents in all layers
+
+  COMPUTATION: MASS DENSITY
+    - compute_all_rhoR()        Compute mass densities for all layers
+
+  COMPUTATION: STRESS
+    - compute_all_stress()      Compute Cauchy stress for all layers
+
+  GEOMETRY: UPDATES AND EQUILIBRIUM
+    - update_geometry_from_volume_ratio() Update geometry for all layers based on incompressibility constraint
+    - update_wss()              Update wall shear stress for all layers at given timestep
+    - solve_equilibrium_geometry() Solve for equilibrium geometry for all layers
+
+  PERTURBATIONS
+    - apply_perturbations()     Apply perturbations to all layers
+    - update_wss_and_F()        Update wall shear stress and deformation gradient after perturbations
+
+  OUTPUT: DATA EXPORT
+    - setup_outputs()           Setup outputs for all layers and constituents
+    - to_dict_summary()         Get summary data for all layers
+    - write_timestep_data()     Write detailed timestep data for all layers
+
+NOTES
+  - Orchestrates operations across multiple layers
+  - Each layer manages its own constituents
+  - Provides high-level interface for simulation workflow
+  - Orchestrates data export and output formatting

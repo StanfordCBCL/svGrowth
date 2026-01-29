@@ -1,0 +1,80 @@
+================================================================================
+CONSTITUENT.PY - Constituent-Level Mass Density and Stress
+================================================================================
+
+ABSTRACT BASE CLASS: Constituent
+
+  INITIALIZATION
+    - __init__()                Initialize Constituent with name
+    - from_parameters()         Factory method to create appropriate constituent type
+
+  PROPERTY ACCESSORS
+    - get_rhoR_alpha()          Get referential mass density for specified timestep
+    - set_rhoR_alpha()          Update mass density for specified timestep
+    - _timestep_exists()        Check if a specific timestep exists in history
+
+  UTILITIES: HISTORY MANAGEMENT
+    - _update_history()         Update history at timestep (append if new, update if exists)
+
+  ABSTRACT METHODS (must be implemented by subclasses)
+    - guess_rhoR_alpha()        Guess referential mass density at target timestep
+    - compute_rhoR_alpha()      Compute referential mass density at target timestep
+    - compute_sigma_alpha()     Compute constituent stress via heredity integral
+
+--------------------------------------------------------------------------------
+
+CLASS: SingleConstituent 
+
+  INITIALIZATION
+    - __init__()                Initialize SingleConstituent
+    - from_parameters()         Create and fully initialize single constituent from parameters
+    - _initialize_deposition_stretch() Initialize deposition stretch tensor G_α from YAML input
+    - _initialize_homeostatic_kinetics() Initialize kinetics histories at t=0
+    - _initialize_active_properties() Initialize active properties for contractile constituents
+
+  COMPUTATION: MASS DENSITY
+    - guess_rhoR_alpha()        Guess referential mass density for target timestep
+    - compute_rhoR_alpha()      Compute referential mass density at target timestep
+
+  COMPUTATION: STRESS
+    - get_stress()              Get intramural stress contribution
+    - compute_sigma_alpha()     Compute constituent stress via heredity integral
+
+  COMPUTATION: ACTIVE STRESS
+    - _compute_active_stress_at_homeostasis() Compute homeostatic active stress (at t=0)
+    - compute_active_radius()   Compute active radius via heredity integral
+    - compute_active_stress_component() Compute circumferential active stress σ̂_act
+
+  OUTPUT: DATA EXPORT
+    - to_dict()                 Convert constituent state to dictionary for serialization
+
+--------------------------------------------------------------------------------
+
+CLASS: MultiFiberFamilyConstituent (extends SingleConstituent)
+DESCRIPTION: Collection of SingleConstituents with same kinetics, but different mechanical properties
+
+  INITIALIZATION
+    - __init__()                Initialize MultiFiberFamilyConstituent
+    - from_parameters()         Create and initialize multi-fiber family constituent
+    - _validate_mass_fraction_ratios() Validate that mass fraction ratios sum to 1.0
+    - _create_fiber_family()    Create individual fiber family
+    - _initialize_total_kinetics_histories() Initialize total kinetics by summing fiber families
+
+  COMPUTATION: MASS DENSITY
+    - guess_rhoR_alpha()        Guess referential mass density for target timestep
+    - compute_rhoR_alpha()      Compute rhoR_alpha for all fiber families and update total
+
+  COMPUTATION: STRESS
+    - get_stress()              Get total intramural stress from all fiber families
+    - compute_stress()          Compute total stress from all fiber families
+
+  PROPERTY ACCESSORS
+    - get_fiber_families()      Return list of individual fiber families
+
+NOTES
+  - Abstract base class defines interface for all constituents
+  - SingleConstituent handles individual structural components (elastin, SMC, collagen)
+  - MultiFiberFamilyConstituent aggregates multiple fiber families with different orientations
+  - Supports active stress computation for contractile constituents (e.g., smooth muscle)
+  - Mass density evolution via heredity integral: ρ_α(s) = ∫ mR(τ)·q(s,τ) dτ
+  - Stress via heredity integral: σ_α(s) = ∫ (mR·q/ρ_h)·σ̂_α(s,τ) dτ

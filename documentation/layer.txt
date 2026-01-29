@@ -1,0 +1,86 @@
+================================================================================
+LAYER.PY - Vessel Layer with Constituents and Kinematics
+================================================================================
+
+CLASS: Layer
+
+  INITIALIZATION
+    - __init__()                         Initialize Layer with name
+    - from_parameters()                  Create and initialize Layer from parameter dictionary
+    - set_kinematics()                   Set kinematics for this layer
+    - _initialize_homeostatic_geometry() Initialize homeostatic geometry and time histories
+    - _initialize_perturbations()        Initialize perturbations from configuration
+    - _ensure_kinematics_set()           Ensure kinematics has been set before use
+    - _ensure_homeostatic_initialized()  Ensure homeostatic values have been initialized
+
+  CONSTITUENT MANAGEMENT
+    - add_constituent()         Add constituent to layer and set back-reference
+    - get_all_fiber_families()  Get all individual fiber families from all constituents
+    - get_constituent_summary() Get summary of constituents and fiber families
+
+  PROPERTY ACCESSORS: HOMEOSTATIC STATE
+    - get_homeostatic_inner_radius()    Get homeostatic inner radius
+    - get_homeostatic_thickness()       Get homeostatic thickness
+    - get_homeostatic_mid_radius()      Get homeostatic mid-radius
+    - get_homeostatic_axial_stretch()   Get homeostatic axial stretch
+    - get_homeostatic_density()         Get homeostatic density
+    - get_homeostatic_deformation_gradient() Get homeostatic F (identity matrix)
+    - get_homeostatic_geometry()        Return homeostatic (reference) layer geometry
+
+  PROPERTY ACCESSORS: CURRENT STATE
+    - get_inner_radius()        Get inner radius at specified timestep
+    - get_thickness()           Get thickness at specified timestep
+    - get_mid_radius()          Get mid-wall radius at specified timestep
+    - get_outer_radius()        Get outer radius at specified timestep
+    - get_axial_stretch()       Get axial stretch at specified timestep
+    - get_density()             Get mass density at specified timestep
+    - get_stress()              Get stress tensor at specified timestep
+    - get_deformation_gradient() Get deformation gradient F at specified timestep
+    - get_volume_ratio()        Get volume ratio J at specified timestep
+    - get_pressure()            Get pressure at specified timestep
+    - get_flow_rate()           Get flow rate at specified timestep
+    - get_wss()                 Get wall shear stress at specified timestep
+    - get_geometry()            Return layer geometry at specified timestep
+
+  INITIAL GUESSES
+    - guess_all_rhoR_alpha()    Guess mass densities for all constituents at target timestep
+    - guess_loading_variables() Guess loading variables for next timestep
+    - guess_geometry()          Guess geometry for next timestep and compute initial F
+    - guess_stress_and_wss()    Guess stress and WSS from previous timestep
+
+  COMPUTATION: MASS DENSITY
+    - compute_all_rhoR_alpha()  Compute mass densities for all constituents at target timestep
+
+  COMPUTATION: STRESS
+    - compute_all_stress()      Compute total layer stress from constituent heredity integrals
+    - compute_homeostatic_stress_direct() Compute homeostatic stress directly (bypass integrals)
+    - get_stress_trace()        Get trace of stress tensor (intramural stress)
+
+  COMPUTATION: VOLUME RATIO
+    - compute_volume_ratio()    Compute volume ratio J at specified timestep
+
+  PERTURBATIONS
+    - apply_perturbations()     Apply perturbations to the layer
+    - _update_histories_with_perturbed_values() Update history arrays with perturbed values
+
+  GEOMETRY: EQUILIBRIUM SOLVER INTERFACE
+    - compute_equilibrium_residual() Compute equilibrium residual for trial geometry value
+    - solve_equilibrium_geometry()   Solve for equilibrium geometry using root-finding
+
+  GEOMETRY: UPDATES
+    - update_geometry_from_volume_ratio() Update geometry from incompressibility constraint (J = ρ_h/ρ)
+    - update_geometry_from_trial()        Update geometry from trial value during equilibrium solving
+    - update_wss()                        Update wall shear stress based on current geometry
+    - update_deformation_gradient()       Update deformation gradient F based on current geometry
+
+  UTILITIES: HISTORY MANAGEMENT
+    - _update_history()         Update history at timestep (append if new, update if exists)
+
+  OUTPUT: DATA EXPORT
+    - to_dict()                 Convert layer state to dictionary for output
+
+NOTES
+  - Represents a tissue layer as a constrained mixture
+  - Manages layer-level geometry, deformation, mass, stress and perturbations 
+  - Coordinates constituent computations via delegation (kinematics, mechanics, etc.)
+  - Maintains time histories for all layer quantities
