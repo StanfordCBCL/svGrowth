@@ -79,7 +79,7 @@ class TestLatorre2018:
         
         postprocessor = SimulationPostprocessor(
             sim_results_dir=temp_output_dir,
-            params_filename='simulation_params.yaml',
+            params_filename='sim_params.yaml',
             postproc_output_dir='postprocessing'
         )
         postprocessor.run_all()

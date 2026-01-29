@@ -3,18 +3,30 @@
 # ==============================================================================
 simulation:
   simulation_name: "latorre2018"
-  output_directory: "sim_results"
-  n_days: 100
+  output_directory: "outputdir"
+  n_days: 100.0
   dt: 0.5                      # days
-  tolerance: 1e-12
-  max_iterations: 50
 
   # Numerical methods
-  integration_method: "trapezoidal"                  # For heredity integrals (trapezoidal, simpson)
-  survival_function_computation: "backward"         # For survival function (naive, backward) # TODO: revised naming
+  integration_method: "trapezoidal"                 # For heredity integrals (trapezoidal, simpson)
+  survival_function_computation: "backward"         # For survival function (naive, backward) 
   
   # Verbosity
   log_level: "info"
+
+  # --------------------------------------------------------------------------
+  # Equilibrium Solver (Geometric Equilibrium)
+  # --------------------------------------------------------------------------
+  equilibrium_solver:
+    method: "brentq"           # Root-finding method (brentq, toms748, bisect)
+    tolerance: 1e-5            # Tolerance for equilibrium residual
+
+  # --------------------------------------------------------------------------
+  # Fixed-Point Solver (Mass-Geometry Coupling)
+  # --------------------------------------------------------------------------
+  fixed_point_solver:
+    tolerance: 1e-12           # Relative tolerance for mass density convergence
+    max_iterations: 50         # Maximum fixed-point iterations
 
 
 # ==============================================================================
@@ -63,7 +75,7 @@ layers:
       lambda_z_h: 1.0            # dimensionless (homeostatic axial stretch)
     
     # --------------------------------------------------------------------------
-    # Constituents (Dictionary format - matches your code!)
+    # Constituents 
     # --------------------------------------------------------------------------
     constituents:
       
