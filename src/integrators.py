@@ -71,57 +71,6 @@ class TrapezoidIntegrator(Integrator):
 
         return integral_value
 
-# Update TrapezoidalIntegrator.integrate() with better debugging
-
-    # def integrate(self, f: List[float]) -> float:
-    #     """
-    #     Perform trapezoidal integration.
-
-    #     Args:
-    #         f (List[float]): Discrete function values [f(0), f(1), ..., f(n)]
-
-    #     Returns:
-    #         float: Approximate integral value.
-        
-    #     Raises:
-    #         ValueError: If fewer than two points are available or invalid bounds.
-    #     """
-    #     # Debug output
-    #     print(f"        [TrapIntegrator] Integrating from index {self.stop} to {self.start}")
-    #     print(f"        [TrapIntegrator] Input array has {len(f)} values (indices 0 to {len(f)-1})")
-    #     print(f"        [TrapIntegrator] dt = {self.dt}")
-        
-    #     # Validation
-    #     n = self.start - self.stop + 1  # Number of points
-        
-    #     if n < 1:
-    #         raise ValueError(
-    #             f"Invalid bounds: start={self.start}, stop={self.stop}. "
-    #             f"Expected start >= stop."
-    #         )
-        
-    #     if self.start >= len(f):
-    #         raise ValueError(
-    #             f"start index {self.start} out of bounds for array of length {len(f)}"
-    #         )
-        
-    #     if self.stop < 0:
-    #         raise ValueError(f"stop index {self.stop} cannot be negative")
-        
-    #     if n == 1:
-    #         # Single point - no integration needed
-    #         print(f"        [TrapIntegrator] Single point, returning 0.0")
-    #         return 0.0
-        
-    #     # Perform backward trapezoidal integration
-    #     integral_value = 0.0
-    #     for i in range(self.start, self.stop, -1):
-    #         integral_value += (f[i] + f[i - 1]) * self.dt / 2
-            
-    #     print(f"        [TrapIntegrator] Integrated {n-1} intervals, result = {integral_value:.6f}")
-        
-    #     return integral_value
-
 
 class SimpsonIntegrator(Integrator):
     """

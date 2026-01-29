@@ -13,17 +13,18 @@ class Configuration:
         # Global configuration state (computed from layers)
         self.total_mass = 0.0
         self.global_stress_state = None
-    
+
+    # =========================================================================
+    # INITIALIZATION
+    # =========================================================================
+    #     
     @classmethod
     def from_parameters(cls, params: Dict[str, Any]) -> 'Configuration':
         """Create and fully initialize Configuration from parameter dictionary."""
         #print("Initializing vessel configuration...")
-        
-        # Validate parameters first
         cls._validate_parameters(params)
         
         config = cls(params)
-        
         # Initialize each layer (layer initializes its own constituents)
         layers_data = params['layers']
         for layer_data in layers_data:
@@ -41,34 +42,57 @@ class Configuration:
 
     @staticmethod
     def _validate_parameters(params):
-        # TODO: Refactor at the end.
+        # TODO: Refactor with custom error handling/logging.
         """Validate parameter structure."""
         if 'layers' not in params:
             raise ValueError("Missing required parameter section: layers")
         if 'simulation' not in params :
             raise ValueError("Missing required section: simulation")
+
+    # =========================================================================
+    # CONFIGURATION: LAYER MANAGEMENT
+    # =========================================================================
+    
+    def add_layer(self, layer):
+        """Add a layer to the configuration."""
+        self.layers.append(layer)
     
     def _enforce_layer_interactions(self):
         """Enforce constraints between layers (contact, compatibility, etc.)."""
         # [FUTURE] Implement layer interaction constraints here.
 
-    def add_layer(self, layer):
-        self.layers.append(layer)
+    # =========================================================================
+    # INITIAL GUESSES
+    # =========================================================================
 
-    def guess_all_rhoR_alpha(self, target_timestep, guess_method="from_previous_timestep"):
-        """Guess mass densities for all constituents in all layers using specified method."""
-        #print(f"Guessing rhoR_alpha for all constituents at timestep {target_timestep} using method '{guess_method}' method")
-        
+    def guess_geometry(self, target_timestep: int, guess_method: str = "from_previous_timestep") -> None:
+        """Guess geometry for all layers at target timestep."""
         for layer in self.layers:
-            layer.guess_all_rhoR_alpha(target_timestep, guess_method)
+            layer.guess_geometry(target_timestep, guess_method)
 
     def guess_loading_variables(self, target_timestep: int) -> None:
         """Guess loading variables for all layers at target timestep."""
         for layer in self.layers:
             layer.guess_loading_variables(target_timestep)
 
-    def compute_all_rhoR(self, target_timestep, dt, integration_method, survival_function_computation):
-        """Compute mass densities for all constituents in all layers.
+    def guess_stress_and_wss(self, target_timestep: int) -> None:
+        """Guess stress and wall shear stress for all layers at target timestep."""
+        #print(f"  Guessing stress and WSS for all layers at timestep {target_timestep}")
+        for layer in self.layers:
+            layer.guess_stress_and_wss(target_timestep)
+
+    def guess_all_rhoR_alpha(self, target_timestep: int, guess_method: str = "from_previous_timestep") -> None:
+        """Guess mass densities for all layers at target timestep using specified method."""
+        #print(f"Guessing rhoR_alpha for all constituents at timestep {target_timestep} using method '{guess_method}' method")
+        for layer in self.layers:
+            layer.guess_all_rhoR_alpha(target_timestep, guess_method)
+
+    # =========================================================================
+    # COMPUTATION: MASS DENSITY
+    # =========================================================================
+
+    def compute_all_rhoR(self, target_timestep: int, dt: float, integration_method: str, survival_function_computation: str) -> list:
+        """Compute mass densities for all layers.
         
         Returns:
             List[float]: Total mass density for each layer (kg/m³)
@@ -87,23 +111,14 @@ class Configuration:
         
         return rhoR_for_all_layers
 
-    def guess_stress_and_wss(self, target_timestep: int) -> None:
-        """Guess stress and wall shear stress for all layers at target timestep."""
-        #print(f"  Guessing stress and WSS for all layers at timestep {target_timestep}")
-
-        for layer in self.layers:
-            layer.guess_stress_and_wss(target_timestep)
-
-    def guess_geometry(self, timestep: int, 
-                  guess_method: str = "from_previous_timestep") -> None:
-        """Guess geometry for all layers at target timestep."""
-        for layer in self.layers:
-            layer.guess_geometry(timestep, guess_method)
+    # =========================================================================
+    # COMPUTATION: STRESS
+    # =========================================================================
 
     def compute_all_stress(self, target_timestep: int, dt: float, 
                       integration_method: str,
                       survival_function_computation: str) -> None:
-        """Compute stresses for all layers."""
+        """Compute Cauchy stress for all layers."""
         #print(f"Computing stress for all layers at target timestep {target_timestep}")
         
         for layer in self.layers:
@@ -113,6 +128,10 @@ class Configuration:
                 integration_method,
                 survival_function_computation
             )
+
+    # =========================================================================
+    # GEOMETRY: UPDATES AND EQUILIBRIUM
+    # =========================================================================
 
     def update_geometry_from_volume_ratio(self, timestep: int, guess_variable: str = "mid_radius") -> None:
         """Update geometry for all layers based on incompressibility constraint.
@@ -140,7 +159,6 @@ class Configuration:
         
         for layer in self.layers:
             layer.update_wss(timestep)
-
 
     def solve_equilibrium_geometry(
         self,
@@ -206,7 +224,38 @@ class Configuration:
             'layer_results': layer_results
         }
     
+    # =========================================================================
+    # PERTURBATIONS
+    # =========================================================================
 
+    def apply_perturbations(self, timestep: int, current_time: float):
+        """Apply perturbations to all layers.
+        
+        This is called from Simulation at the start of each timestep to update
+        loading conditions based on active perturbations.
+        
+        Args:
+        current_time: Current physical time (days)
+        
+        Side Effects:
+            Updates layer histories with perturbed values
+        """
+        for layer in self.layers:
+            layer.apply_perturbations(timestep, current_time)
+
+    def update_wss_and_F(self, timestep: int) -> None:
+        """Update wall shear stress and deformation gradient for all layers at given timestep.
+        
+        Called after perturbations to recompute WSS and F based on new flow rate and axial stretch.
+        """
+        for layer in self.layers:
+            layer.update_wss(timestep)
+            layer.update_deformation_gradient(timestep)
+
+    # =========================================================================
+    # OUTPUT: DATA EXPORT
+    # =========================================================================
+    
     def setup_outputs(self, io_handler: 'IOHandler'):
         """Setup outputs for all layers and constituents.
         
@@ -267,26 +316,3 @@ class Configuration:
                         const_data,
                         layer_name=layer.name
                     )
-    def apply_perturbations(self, timestep: int, current_time: float):
-        """Apply perturbations to all layers.
-        
-        This is called from Simulation at the start of each timestep to update
-        loading conditions based on active perturbations.
-        
-        Args:
-        current_time: Current physical time (days)
-        
-        Side Effects:
-            Updates layer histories with perturbed values
-        """
-        for layer in self.layers:
-            layer.apply_perturbations(timestep, current_time)
-
-    def update_wss_and_F(self, timestep: int) -> None:
-        """Update wall shear stress and deformation gradient for all layers at given timestep.
-        
-        Called after perturbations to recompute WSS and F based on new flow rate and axial stretch.
-        """
-        for layer in self.layers:
-            layer.update_wss(timestep)
-            layer.update_deformation_gradient(timestep)

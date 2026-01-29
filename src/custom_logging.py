@@ -42,21 +42,9 @@ class IndentedLogger:
         self.logger = logging.getLogger(name)
         self.indent_level = 0
     
-    def _format_msg(self, msg: str) -> str:
-        """Add indentation to message.
-        
-        Args:
-            msg: Message to format
-            
-        Returns:
-            Indented message string
-        """
-        indent = '  ' * self.indent_level
-        return f"{indent}{msg}"
-    
-    # ========================================================================
-    # Standard logging levels
-    # ========================================================================
+    # =========================================================================
+    # LOGGING METHODS
+    # =========================================================================
     
     def debug(self, msg: str):
         """Log debug message with indentation.
@@ -98,9 +86,9 @@ class IndentedLogger:
         """
         self.logger.critical(self._format_msg(f"🔥 {msg}"))
     
-    # ========================================================================
-    # Special formatting
-    # ========================================================================
+    # =========================================================================
+    # FORMATTING METHODS
+    # =========================================================================
     
     def section(self, title: str, log_level: str = 'INFO'):
         """Print section header with indentation.
@@ -118,9 +106,9 @@ class IndentedLogger:
             print(f"{indent}{title}")
             print(f"{indent}{separator}")
         
-    # ========================================================================
-    # Indentation control
-    # ========================================================================
+    # =========================================================================
+    # INDENTATION CONTROL
+    # =========================================================================
     
     def indent(self):
         """Increase indentation level."""
@@ -129,10 +117,22 @@ class IndentedLogger:
     def dedent(self):
         """Decrease indentation level."""
         self.indent_level = max(0, self.indent_level - 1)
-    
-    # ========================================================================
-    # Context manager support
-    # ========================================================================
+
+    def _format_msg(self, msg: str) -> str:
+        """Add indentation to message.
+        
+        Args:
+            msg: Message to format
+            
+        Returns:
+            Indented message string
+        """
+        indent = '  ' * self.indent_level
+        return f"{indent}{msg}"
+        
+    # =========================================================================
+    # CONTEXT MANAGER
+    # =========================================================================
     
     def __enter__(self):
         """Enter indented context (auto-indent).

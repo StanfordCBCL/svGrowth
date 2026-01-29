@@ -1,7 +1,9 @@
 import os
+from typing import Dict
 from configuration import Configuration
 from io_handler import IOHandler
 from custom_logging import get_logger
+from fixed_point_solver import FixedPointSolver
 
 class Simulation:
     def __init__(self, 
@@ -9,43 +11,70 @@ class Simulation:
                  io_handler=None, 
                  simulation_name=None, 
                  output_directory=None, 
-                 dt=1, 
-                 n_steps=100, 
-                 tolerance=1e-12, 
-                 max_iterations=50, 
+                 dt=None, 
+                 n_steps=None,
+                 
+                 # Fixed-point solver parameters
+                 fixed_point_tolerance=1e-6,
+                 fixed_point_max_iterations=50,
+                 
+                 # Equilibrium solver parameters
+                 equilibrium_solver_method='brentq',
+                 equilibrium_tolerance=1e-5,
+                 equilibrium_verbose=False,
+                 
+                 # Numerical methods
                  integration_method='trapezoidal',
-                 survival_function_computation='backward',  
+                 survival_function_computation='backward',
+                 
+                 # Verbosity
                  verbose=False,
                  detail_level=None,
                  log_level='INFO'):
 
-        # Setup logger for this class
         self.logger = get_logger(__name__)
 
         self.configuration = configuration
         self.dt = dt
         self.n_steps = n_steps
-        self.tolerance = float(tolerance)
-        self.max_iterations = int(max_iterations)
+        
+        # Fixed-point solver parameters
+        self.fixed_point_tolerance = float(fixed_point_tolerance)
+        self.fixed_point_max_iterations = int(fixed_point_max_iterations)
+        
+        # Equilibrium solver parameters
+        self.equilibrium_solver_method = equilibrium_solver_method
+        self.equilibrium_tolerance = float(equilibrium_tolerance)
+        self.equilibrium_verbose = equilibrium_verbose
+        
+        # Numerical methods
         self.integration_method = integration_method
         self.survival_function_computation = survival_function_computation
+        
+        # Verbosity
         self.verbose = verbose
         self.log_level = log_level
-        self.current_timestep = 0  # Current timestep index (0 = initial/homeostatic state)
+        self.current_timestep = 0
         
-        # Simulation metadata (owned by Simulation)
-        self.simulation_name = simulation_name or getattr(configuration, 'simulation_name', 'default_simulation')
-        self.output_directory = output_directory or getattr(configuration, 'output_directory', 'output')
-        
-        # IO service (used by Simulation)
+        # Simulation metadata
+        self.simulation_name = simulation_name 
+        self.output_directory = output_directory 
+
+        # Fixed-point solver
+        self.fixed_point_solver = FixedPointSolver(
+            tolerance=self.fixed_point_tolerance,
+            max_iterations=self.fixed_point_max_iterations,
+            perform_initial_solve=True,  
+            verbose=self.verbose
+        )
+
+        # IO service
         self.io_handler = IOHandler(
             detail_level=detail_level,
             log_level=log_level,
             output_dir=output_directory
         )
-        
-        # Output file handle (will be set up during run)
-        self.output_file = None
+
 
     def run(self):
         """Run the complete G&R simulation."""
@@ -55,174 +84,82 @@ class Simulation:
         self.logger.info("Starting G&R simulation")
         self.logger.info(f"Steps: {self.n_steps}, dt: {self.dt}")
 
-        # ========================================================================
-        # WRITE INITIAL STATE (t=0, homeostatic)
-        # ========================================================================
+        # Write initial state (t=0, homeostatic)
         self.logger.section("TIMESTEP 0 (Homeostatic State)")
         time_0 = 0
         self._write_timestep_data(self.current_timestep, time_0)
 
-        # ========================================================================
-        # MARCH THROUGH TIME
-        # ========================================================================
-        #TODO: refactor step vs current_timestep        
+        #TODO: refactor with current_timestep variable
+        # March through time     
         for step in range(self.n_steps):
 
             next_timestep = self.current_timestep + 1
             time = next_timestep * self.dt
+            self.logger.section(f"TIMESTEP {next_timestep}/{self.n_steps}")
+            
+            # Step 1: Make initial guesses for fixed point iteration
+            self._make_initial_guesses(next_timestep)
 
-            self.logger.section(f"TIMESTEP {next_timestep}/{self.n_steps}")  
-
-            self.configuration.apply_perturbations(next_timestep, time)           
-            # ========================================================================
-            # STEP 1: Initial Guesses
-            # ========================================================================
-            self.configuration.guess_all_rhoR_alpha(
-                next_timestep, guess_method="from_previous_timestep"
-            )
-
-            # TODO: Make sure guess geometry includes active radius for active stress
-            self.configuration.guess_geometry(
-                next_timestep, guess_method="from_previous_timestep"
-            )
-
-            self.configuration.guess_loading_variables(next_timestep)
-            # TODO: Not needed if we pre-allocate arrays with 0. Guess stress for mass production.
-            self.configuration.guess_stress_and_wss(next_timestep)
-
-            self.configuration.apply_perturbations(next_timestep, time)
-
+            # Step 2: Apply perturbations
             # TODO: Streamline this in combination with guesses. Currenty we need to recompute wss and F after perturbations, if we perturb axial stretch or flow.
             # TODO: In 3D, every time we compute F we might need to update J as well, see when J = rhoR_alpha/rhoR_h is valid.
+            self.configuration.apply_perturbations(next_timestep, time)
             self.configuration.update_wss_and_F(next_timestep)
-
-            # Compute kinetics with initial guesses
-            self.configuration.compute_all_rhoR(
-                next_timestep, 
-                self.dt, 
-                self.integration_method,
-                self.survival_function_computation 
-            )
-            
-            # Solve for equilibrium geometry with initial kinetics
-            result = self.configuration.solve_equilibrium_geometry(
+                        
+            # Step 3: Solve Coupled Mass-Geometry System
+            result = self.fixed_point_solver.solve(
+                configuration=self.configuration,
                 timestep=next_timestep,
                 dt=self.dt,
                 integration_method=self.integration_method,
                 survival_function_computation=self.survival_function_computation,
-                solver_method='brentq',
-                tolerance=1e-5,
-                verbose=self.verbose
+                equilibrium_solver_params={
+                    'solver_method': self.equilibrium_solver_method,
+                    'tolerance': self.equilibrium_tolerance,
+                    'verbose': self.equilibrium_verbose
+                }
             )
-
-            if not result['all_converged']:
-                raise RuntimeError(
-                    f"Initial equilibrium solver failed at timestep {next_timestep}"
-                )
-                        
-           # ====================================================================
-            # STEP 4: Fixed-Point Iteration (Mass-Geometry Coupling)
-            # ====================================================================           
-            iteration = 0
-            converged = False
-
-            while iteration < self.max_iterations:
-                iteration += 1
-
-                # Store old mass densities BEFORE updating them
-                rho_old = {}
-                for layer in self.configuration.layers:
-                    rho_old[layer.name] = layer.get_density(next_timestep)
-
-                # Compute Mass Densities (Heredity Integrals)
-                self.configuration.compute_all_rhoR(
-                    next_timestep, 
-                    self.dt, 
-                    self.integration_method,
-                    self.survival_function_computation 
-                )
-                    
-                # Solve for Equilibrium Geometry
-                # 
-                # This encapsulates an iterative solve that repeatedly executes:
-                #   TODO: check order of step 3, or if can be excluded from loop
-                #   3. Update geometry from trial value (uses incompressibility J=ρ_h/ρ)
-                #   4. Update WSS (depends on inner radius)
-                #   5. Compute mixture stress (via constituent heredity integrals)
-                #   6. Check residual: σ_θθ(mixture) - σ_θθ(theoretical)
-                #
-                # The solver finds geometry where residual ≈ 0.
-                result = self.configuration.solve_equilibrium_geometry(
-                    timestep=next_timestep,
-                    dt=self.dt,
-                    integration_method=self.integration_method,
-                    survival_function_computation=self.survival_function_computation,
-                    solver_method='brentq', # exposure to yaml file
-                    tolerance=1e-5, # exposure to yaml file
-                    verbose=self.verbose
-                )
-                
-                if not result['all_converged']:
-                    raise RuntimeError(
-                        f"Equilibrium solver failed at timestep {next_timestep}. "
-                        f"Check layer results for details."
-                    )
-                
-                # (d) Check convergence on mass density for each layer
-                all_layers_converged = True
-                max_relative_change = 0.0
-                
-                for layer in self.configuration.layers:
-                    rho_new = layer.get_density(next_timestep)
-                    rho_prev = rho_old[layer.name]
-                    
-                    # Compute relative change
-                    if rho_prev > 0:
-                        relative_change = abs(rho_new - rho_prev) / rho_prev
-                    else:
-                        relative_change = 0.0
-                    
-                    max_relative_change = max(max_relative_change, relative_change)
-                    
-                    # Check if this layer has converged
-                    layer_converged = relative_change <= self.tolerance
-                    
-                    if not layer_converged:
-                        all_layers_converged = False
-
-                # (e) Check stopping criteria
-                if all_layers_converged:
-                    self.logger.info(f"✓ Converged in {iteration} iteration(s)")
-                    self.logger.info(f"  Max Δρ/ρ = {max_relative_change:.2e} < {self.tolerance:.2e}")
-                    converged = True
-                    break
-
-            # Check if we exceeded max iterations
-            if not converged:
-                    self.logger.warning(f"⚠️  Timestep {step+1} did not converge in {self.max_iterations} iterations")
-                    self.logger.warning(f"   Max Δρ/ρ = {max_relative_change:.2e} > {self.tolerance:.2e}")
-
             
-            # (f) Write results for this timestep
-            self._write_timestep_data(next_timestep, time)
+            if not result['converged']:
+                self.logger.warning(
+                    f"⚠️  Timestep {next_timestep}: {result['message']}"
+                )
 
-            # Timestep complete
+            self._write_timestep_data(next_timestep, time)
             self.current_timestep = next_timestep  
 
         self._finalize_outputs()    
+
+    def _make_initial_guesses(
+        self, 
+        timestep: int, 
+        guess_method: str = "from_previous_timestep"
+    ) -> None:
+        """Make initial guesses for all variables at target timestep.
         
+        Initializes:
+        - Mass densities (ρ_α)
+        - Geometry (a, h, λ_z)
+        - Loading variables (P, Q)
+        - Stress and WSS
+        
+        Args:
+            timestep: Target timestep to make guesses for
+            guess_method: Guessing strategy (default: from previous timestep)
+        """
+        # TODO: refactor guess_method options with registry and expose to input params file
+        # TODO: refactor which guesses are needed based on perturbations and kinetics
+        self.configuration.guess_all_rhoR_alpha(timestep, guess_method)
+        self.configuration.guess_geometry(timestep, guess_method)
+        self.configuration.guess_loading_variables(timestep)
+        self.configuration.guess_stress_and_wss(timestep)
+                
     def _setup_outputs(self):
         """Setup all output files at start."""
         self.io_handler.setup_simulation_summary()
         self.io_handler.setup_metadata_output()
         self.configuration.setup_outputs(self.io_handler)
         
-        # Store simulation config in metadata
-        self.io_handler.update_metadata('configuration', {
-            'dt': self.dt,
-            'n_steps': self.n_steps,
-            'integration_method': self.integration_method
-        })
     
     def _write_timestep_data(self, timestep: int, time: float):
         """Write data for current timestep."""
@@ -239,19 +176,9 @@ class Simulation:
             'total_steps': self.current_timestep,
             'final_time': self.current_timestep * self.dt
         })
-        self.io_handler.update_metadata('statistics', {
-            'total_steps': self.current_timestep,
-            'final_time': self.current_timestep * self.dt
-        })
         self.io_handler.close_all()
         
         print(f"✓ Simulation complete. Results saved to {self.io_handler.output_dir}/")
-
-    def _cleanup_output(self):
-        """Clean up output files at simulation end."""
-        if self.output_file:
-            self.output_file.close()
-            print(f"Simulation complete. Results saved to {self.output_directory}")
 
     def save_final_configuration(self, filename=None):
         """Save the final configuration parameters to YAML file."""

@@ -16,7 +16,7 @@ from integrators import SurvivalFunctionComputationFactory, IntegratorFactory
 
 
 # =============================================================================
-# MODULE-LEVEL HELPER FUNCTIONS
+# UTILITIES: MODULE-LEVEL HELPERS
 # =============================================================================
 
 def _compute_delta(current, homeostatic):
@@ -43,7 +43,6 @@ def _compute_delta(current, homeostatic):
         return current  # Absolute delta for zero-homeostatic stimuli (e.g., inflammation)
     
     return (current - homeostatic) / homeostatic
-
 
 # =============================================================================
 # DEGRADATION RATE FUNCTIONS
@@ -75,7 +74,6 @@ class ConstantDegradationRate(DegradationRateFunction):
     
     def compute_k_alpha(self, context, current_timestep):
         return self.k_alpha_h
-
 
 class QuadraticDegradationRate(DegradationRateFunction):
     """Quadratic stimulus-modulated degradation.
@@ -120,7 +118,6 @@ class QuadraticDegradationRate(DegradationRateFunction):
         
         return self.k_alpha_h * upsilon
 
-
 # =============================================================================
 # SURVIVAL FUNCTIONS
 # =============================================================================
@@ -164,7 +161,6 @@ class SurvivalFunction(ABC):
             >>> #           [0.65,   0.72,   0.79,   0.86,   0.93,   1.00]
         """
         pass
-
 
 class ExponentialSurvival(SurvivalFunction):
     """Exponential survival: q(s, τ) = exp(-∫[τ to s] k_α dt
@@ -215,7 +211,6 @@ class ExponentialSurvival(SurvivalFunction):
             integration_method
         )
 
-
 # =============================================================================
 # PRODUCTION RATE FUNCTIONS
 # =============================================================================
@@ -243,7 +238,6 @@ class ProductionRateFunction(ABC):
             mR_alpha value (production rate, kg/(m³·day))
         """
         pass
-
 
 class LinearProductionRate(ProductionRateFunction):
     """Linear stimulus-modulated production.
@@ -296,9 +290,8 @@ class LinearProductionRate(ProductionRateFunction):
     #TODO: return the closed form solution of production rate
     # def __repr__(self):
 
-
 # =============================================================================
-# MAIN KINETICS CLASS
+# ORCHESTRATOR: MAIN KINETICS CLASS
 # =============================================================================
 
 class Kinetics:
@@ -313,27 +306,19 @@ class Kinetics:
         self.degradation_function = degradation_function
         self.survival_function = survival_function
         self.production_function = production_function
-    
+
+    # =========================================================================
+    # COMPUTATION: DEGRADATION RATE FUNCTION
+    # =========================================================================
+        
     def compute_k_alpha(self, context, current_timestep):
         """Compute degradation rate at current timestep."""
         return self.degradation_function.compute_k_alpha(context, current_timestep)
-    
-    def compute_production_rate(self, context, current_timestep, k_alpha, rhoR_alpha):
-        """Compute production rate at current timestep.
-        
-        Args:
-            context: KineticsContext for stimulus access
-            current_timestep: Current time s
-            k_alpha: Degradation rate at current timestep
-            rhoR_alpha: Referential mass density at current timestep
-            
-        Returns:
-            Production rate mR_alpha (kg/(m³·day))
-        """
-        return self.production_function.compute_production_rate(
-            context, current_timestep, k_alpha, rhoR_alpha
-        )
-    
+
+    # =========================================================================
+    # COMPUTATION: SURVIVAL FUNCTION
+    # =========================================================================
+         
     def compute_survival_function(
         self,
         k_alpha_history: List[float],
@@ -356,6 +341,30 @@ class Kinetics:
             integration_method,
             survival_function_computation
         )
+
+    # =========================================================================
+    # COMPUTATION: PRODUCTION RATE FUNCTION
+    # =========================================================================
+         
+    def compute_production_rate(self, context, current_timestep, k_alpha, rhoR_alpha):
+        """Compute production rate at current timestep.
+        
+        Args:
+            context: KineticsContext for stimulus access
+            current_timestep: Current time s
+            k_alpha: Degradation rate at current timestep
+            rhoR_alpha: Referential mass density at current timestep
+            
+        Returns:
+            Production rate mR_alpha (kg/(m³·day))
+        """
+        return self.production_function.compute_production_rate(
+            context, current_timestep, k_alpha, rhoR_alpha
+        )
+
+    # =========================================================================
+    # COMPUTATION: HEREDITY INTEGRAL
+    # =========================================================================    
     
     def compute_heredity_integral(
         self,
@@ -411,6 +420,10 @@ class Kinetics:
         rhoR_alpha = rhoR_initial + rhoR_deposited
 
         return rhoR_alpha
+
+    # =========================================================================
+    # INITIALIZATION
+    # =========================================================================
     
     @classmethod
     def from_parameters(cls, params):

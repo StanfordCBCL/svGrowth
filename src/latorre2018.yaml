@@ -6,8 +6,6 @@ simulation:
   output_directory: "outputdir"
   n_days: 701.0
   dt: 0.5                      # days
-  tolerance: 1e-12
-  max_iterations: 50
 
   # Numerical methods
   integration_method: "trapezoidal"                  # For heredity integrals (trapezoidal, simpson)
@@ -16,6 +14,19 @@ simulation:
   # Verbosity
   log_level: "info"
 
+  # --------------------------------------------------------------------------
+  # Equilibrium Solver (Geometric Equilibrium)
+  # --------------------------------------------------------------------------
+  equilibrium_solver:
+    method: "brentq"           # Root-finding method (brentq, toms748, bisect)
+    tolerance: 1e-5            # Tolerance for equilibrium residual
+
+  # --------------------------------------------------------------------------
+  # Fixed-Point Solver (Mass-Geometry Coupling)
+  # --------------------------------------------------------------------------
+  fixed_point_solver:
+    tolerance: 1e-12           # Relative tolerance for mass density convergence
+    max_iterations: 50         # Maximum fixed-point iterations
 
 # ==============================================================================
 # LAYERS

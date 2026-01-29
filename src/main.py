@@ -18,8 +18,10 @@ def main(params_file: str,
     io_handler = IOHandler()
     params = io_handler.load_parameters(params_file)
     params = io_handler.apply_cli_overrides(params, output_dir=output_dir, log_level=log_level)
+    sim_params = params['simulation']
+    fixed_point_params = sim_params.get('fixed_point_solver', {})
+    equilibrium_params = sim_params.get('equilibrium_solver', {})   
 
-    sim_params = params['simulation']    
     init_logging(sim_params['log_level'])
 
     # Save input parameter file to output directory
@@ -37,11 +39,20 @@ def main(params_file: str,
         output_directory=sim_params['output_directory'],
         dt=sim_params['dt'],
         n_steps=int(sim_params['n_days'] / sim_params['dt']),
-        tolerance=float(sim_params.get('tolerance', 1e-12)),
-        max_iterations=int(sim_params.get('max_iterations', 50)),
+        
+        # Fixed-point solver parameters
+        fixed_point_tolerance=float(fixed_point_params.get('tolerance', 1e-12)),
+        fixed_point_max_iterations=int(fixed_point_params.get('max_iterations', 50)),
+        
+        # Equilibrium solver parameters
+        equilibrium_solver_method=equilibrium_params.get('method', 'brentq'),
+        equilibrium_tolerance=float(equilibrium_params.get('tolerance', 1e-5)),
+        
+        # Numerical integration methods
         integration_method=sim_params.get('integration_method', 'trapezoidal'),
         survival_function_computation=sim_params.get('survival_function_computation', 'backward'), 
-        verbose=sim_params.get('verbose', False),
+        
+        # Verbosity
         detail_level=sim_params.get('detail_level', 1),
         log_level=sim_params['log_level']  
     )

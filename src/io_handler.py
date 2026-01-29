@@ -10,7 +10,10 @@ from datetime import datetime
 class IOHandler:
     """Handles file input/output operations."""
     
-    def __init__(self, detail_level: int = 1, log_level: str = 'INFO', output_dir: str = None):
+    def __init__(self, 
+                 detail_level: int = 1, 
+                 log_level: str = 'INFO', 
+                 output_dir: str = None):
         """Initialize IO handler.
         
         Args:
@@ -37,7 +40,7 @@ class IOHandler:
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     # =========================================================================
-    # PARAMETER LOADING (Input)
+    # INPUT: PARAMETER LOADING
     # =========================================================================
     
     def load_parameters(self, file_path: Union[str, Path]) -> Dict[str, Any]:
@@ -55,17 +58,14 @@ class IOHandler:
         """
         # Resolve path to absolute and verify existence
         resolved_path = self._resolve_file_path(file_path)
-        
-        # Check file extension
         self._check_file_extension(resolved_path)
         
-        # Load YAML
         try:
             with open(resolved_path, 'r') as file:
                 params = yaml.safe_load(file)
             
             # TODO: Validate YAML structure if needed
-            
+    
             return params
             
         except yaml.YAMLError as e:
@@ -73,28 +73,6 @@ class IOHandler:
                 f"Error parsing YAML file: {resolved_path}\n"
                 f"YAML error: {e}"
             )
-
-    def save_parameters(self, params: Dict[str, Any]) -> None:
-        """Save simulation parameters with safe names to output directory.
-        
-        Currently not including any command-line overrides.
-        
-        Args:
-            params: Original parameters from YAML
-        """
-        # TODO: merge CLI overrides if provided in the future
-        final_params = copy.deepcopy(params)
-
-        # Add safe names for layer
-        # TODO: can improve YAML readability by adding safe_name after layer_name in YAML
-        if 'layers' in final_params:
-            for layer_config in final_params['layers']:
-                layer_config['safe_name'] = layer_config['layer_name'].replace(' ', '_').lower()
-                                
-        # Save to output directory
-        params_file = self.output_dir / 'simulation_params.yaml'
-        with open(params_file, 'w') as f:
-            yaml.dump(final_params, f, default_flow_style=False, sort_keys=False)
 
     def apply_cli_overrides(self, params: Dict[str, Any], output_dir: str = None, log_level: str = None) -> Dict[str, Any]:
         """Apply CLI overrides to parameters.
@@ -119,50 +97,35 @@ class IOHandler:
         
         return params_copy
 
-    def _resolve_file_path(self, file_path: Union[str, Path]) -> Path:
-        """Resolve file path to absolute path and verify it exists.
+    # =========================================================================
+    # OUTPUT: PARAMETER SAVING
+    # =========================================================================
+         
+    def save_parameters(self, params: Dict[str, Any]) -> None:
+        """Save simulation parameters with safe names to output directory.
+        
+        Currently not including any command-line overrides.
         
         Args:
-            file_path: Path to file (relative or absolute, string or Path object)
-            
-        Returns:
-            Absolute Path object
-            
-        Raises:
-            FileNotFoundError: If file doesn't exist
-            
-        Examples:
-            >>> io = IOHandler()
-            >>> io._resolve_file_path("config.yaml")
-            PosixPath('/current/directory/config.yaml')
-            
-            >>> io._resolve_file_path("../configs/test.yaml")
-            PosixPath('/current/configs/test.yaml')
-            
-            >>> io._resolve_file_path("/absolute/path/file.yaml")
-            PosixPath('/absolute/path/file.yaml')
+            params: Original parameters from YAML
         """
-        # Convert to Path object if string
-        path = Path(file_path)
-        
-        # Resolve to absolute path (handles .., ., symlinks)
-        if not path.is_absolute():
-            path = path.resolve()
-        
-        # Verify file exists
-        if not path.exists():
-            raise FileNotFoundError(
-                f"File not found: {path}\n"
-                f"Original path provided: {file_path}\n"
-                f"Please check the path and try again."
-            )
-        
-        return path
-    
+        final_params = copy.deepcopy(params)
+
+        # Add safe names for layer
+        # TODO: can improve YAML readability by adding safe_name in the lines after layer_name in the YAML file
+        if 'layers' in final_params:
+            for layer_config in final_params['layers']:
+                layer_config['safe_name'] = layer_config['layer_name'].replace(' ', '_').lower()
+                                
+        # Save to output directory
+        params_file = self.output_dir / 'sim_params.yaml'
+        with open(params_file, 'w') as f:
+            yaml.dump(final_params, f, default_flow_style=False, sort_keys=False)
+
     # =========================================================================
-    # SETUP OUTPUT FILES
+    # OUTPUT: FILE SETUP
     # =========================================================================
-    
+
     def setup_simulation_summary(self):
         """Setup summary CSV file (always created)."""
         filepath = self.output_dir / 'simulation_summary.csv'
@@ -233,7 +196,7 @@ class IOHandler:
         }
 
     # =========================================================================
-    # WRITE DATA
+    # OUTPUT: DATA WRITING
     # =========================================================================
     
     def write_summary_row(self, data: Dict[str, Any]):
@@ -291,7 +254,7 @@ class IOHandler:
             json.dump(metadata['data'], f, indent=2)
 
     # =========================================================================
-    # CLEANUP
+    # OUTPUT: FINALIZATION
     # =========================================================================
     
     def close_all(self):
@@ -306,7 +269,39 @@ class IOHandler:
                 writer_info['handle'].close()
         
         self.output_writers.clear()
-    
+
+    # =========================================================================
+    # UTILITIES: VALIDATION HELPERS
+    # =========================================================================
+
+    def _resolve_file_path(self, file_path: Union[str, Path]) -> Path:
+        """Resolve file path to absolute path and verify it exists.
+        
+        Args:
+            file_path: Path to file (relative or absolute, string or Path object)
+            
+        Returns:
+            Absolute Path object
+            
+        Raises:
+            FileNotFoundError: If file doesn't exist
+        """
+        path = Path(file_path)
+        
+        # Resolve to absolute path (handles .., ., symlinks)
+        if not path.is_absolute():
+            path = path.resolve()
+        
+        # Verify file exists
+        if not path.exists():
+            raise FileNotFoundError(
+                f"File not found: {path}\n"
+                f"Original path provided: {file_path}\n"
+                f"Please check the path and try again."
+            )
+        
+        return path
+             
     def _check_file_extension(self, file_path: Path) -> None:
         """Check that file has .yaml or .yml extension.
         
