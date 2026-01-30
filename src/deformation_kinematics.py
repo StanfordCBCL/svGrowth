@@ -6,17 +6,11 @@ import numpy as np
 from enum import Enum
 from tensor_operations import TensorOperations
 from custom_logging import get_logger
-
-# =============================================================================
-# COORDINATE SYSTEMS
-# =============================================================================
-
-class CoordinateSystem(Enum):
-    """Coordinate system types."""
-    CARTESIAN = "cartesian"
-    CYLINDRICAL = "cylindrical"
-    SPHERICAL = "spherical"
-
+from coordinate_systems import (
+    CoordinateSystem,
+    CoordinateSystemType,
+    CylindricalDirection
+)
 
 # =============================================================================
 # DEFORMATION KINEMATICS - Computes F and derived quantities
@@ -32,11 +26,33 @@ class DeformationKinematics(ABC):
     
     All implementations use TensorOperations for consistent tensor algebra.
     """
-    
+    COORDINATE_SYSTEM_TYPE: CoordinateSystemType = None
+       
     def __init__(self):
-        """Initialize with tensor operations utility."""
         self.logger = get_logger(__name__)
         self.tensor_ops = TensorOperations()
+
+        if self.COORDINATE_SYSTEM_TYPE is None:
+            raise NotImplementedError("Must define COORDINATE_SYSTEM_TYPE")
+        self.coord_system = CoordinateSystem.get(self.COORDINATE_SYSTEM_TYPE)
+        self._setup_directions()
+
+    @abstractmethod
+    def _setup_directions(self):
+        """Setup direction enum shortcuts for this coordinate system.
+        
+        Subclasses must implement this to define convenient direction references
+        that match their coordinate system.
+        
+        Example (Cylindrical):
+            self.RADIAL = CylindricalDirection.RADIAL
+            self.CIRCUMFERENTIAL = CylindricalDirection.CIRCUMFERENTIAL
+            self.AXIAL = CylindricalDirection.AXIAL
+
+        These shortcuts are then used throughout the class:
+            sigma_r = self.coord_system.get_diagonal_value(sigma, self.RADIAL)
+        """
+        pass
     
     @abstractmethod
     def compute_deformation_gradient(
@@ -209,24 +225,6 @@ class DeformationKinematics(ABC):
         pass
 
     @abstractmethod
-    def get_component_name(self, index: int) -> str:
-        """Get component name for tensor index.
-        
-        Maps tensor indices to coordinate system component names.
-        For example, cylindrical: 0→'r', 1→'theta', 2→'z'
-        
-        Args:
-            index: Tensor component index (0, 1, or 2)
-            
-        Returns:
-            Component name string
-            
-        Raises:
-            ValueError: If index out of range
-        """
-    pass
-
-    @abstractmethod
     def get_equilibrium_variable(self) -> str:
         #TODO: refactor this to a class?
         """Get name of geometry variable to solve for in equilibrium.
@@ -272,16 +270,22 @@ class ThinWallKinematics(DeformationKinematics):
     Uses TensorOperations for all tensor algebra, ensuring consistency
     with potential future thick-wall or FEM implementations.
     """
-    
-    def __init__(self, coord_system: CoordinateSystem = CoordinateSystem.CYLINDRICAL):
+    COORDINATE_SYSTEM_TYPE = CoordinateSystemType.CYLINDRICAL
+
+    def __init__(self):
         """Initialize thin-wall kinematics.
         
         Args:
-            coord_system: Coordinate system for interpretation
+            coord_system_type: Type of coordinate system (default: cylindrical)
         """
         super().__init__()
-        self.coord_system = coord_system
-    
+        self._setup_directions()
+
+    def _setup_directions(self):
+        self.RADIAL = CylindricalDirection.RADIAL
+        self.CIRCUMFERENTIAL = CylindricalDirection.CIRCUMFERENTIAL
+        self.AXIAL = CylindricalDirection.AXIAL
+
     def compute_deformation_gradient(
         self,
         current_geometry: Dict[str, float],
@@ -323,9 +327,13 @@ class ThinWallKinematics(DeformationKinematics):
         # Radial stretch (from incompressibility: λ_r · λ_θ · λ_z = 1)
         lambda_r = 1.0 / (lambda_theta * lambda_z)
         
-        # F in principal directions (cylindrical coordinates)
-        # F = diag(λ_r, λ_θ, λ_z)
-        F = np.diag([lambda_r, lambda_theta, lambda_z])
+        # Build F using coordinate system
+        stretches = {
+            self.RADIAL: lambda_r,
+            self.CIRCUMFERENTIAL: lambda_theta,
+            self.AXIAL: lambda_z
+        }
+        F = self.coord_system.build_diagonal_tensor(stretches)
         
         return F
 
@@ -348,9 +356,8 @@ class ThinWallKinematics(DeformationKinematics):
         Returns:
             Lagrange multiplier tensor (3×3 diagonal)
         """
-        # Extract radial stress (index 0 in cylindrical coords)
-        # TODO: refactor this tight coupling to sigma[0,0]
-        sigma_r = sigma[0, 0]
+        # Extract radial stress
+        sigma_r = self.coord_system.get_diagonal_value(sigma, self.RADIAL)
         
         # Lagrange multiplier is uniform hydrostatic stress
         lagrange = np.diag([sigma_r, sigma_r, sigma_r])
@@ -420,9 +427,8 @@ class ThinWallKinematics(DeformationKinematics):
         # Extract stretches from F if provided (thin-wall: F is diagonal)
         # TODO: use component recognition to get lambda_theta, lambda_z
         if F is not None:
-            # For thin-wall, F is diagonal: [λ_r, λ_θ, λ_z]
-            lambda_theta = F[1, 1]
-            lambda_z = F[2, 2]
+            lambda_theta = self.coord_system.get_diagonal_value(F, self.CIRCUMFERENTIAL)
+            lambda_z = self.coord_system.get_diagonal_value(F, self.AXIAL)
         elif lambda_theta is not None and lambda_z is not None:
             # Use provided stretches
             pass
@@ -647,25 +653,6 @@ class ThinWallKinematics(DeformationKinematics):
             f"Cannot compute J at timestep {timestep}: "
             f"neither F nor density available"
         )
-
-    def get_component_name(self, index: int) -> str:
-        """Get component name for given tensor index.
-        
-        For cylindrical coordinates:
-            0 → 'r' (radial)
-            1 → 'theta' (circumferential)
-            2 → 'z' (axial)
-        
-        Args:
-            index: Tensor component index (0, 1, or 2)
-            
-        Returns:
-            Component name string
-        """
-        component_names = ['r', 'theta', 'z']
-        if not (0 <= index < 3):
-            raise ValueError(f"Index {index} out of range [0, 2]")
-        return component_names[index]
                 
     def compute_inner_radius(
         self,
