@@ -1,6 +1,7 @@
 import math
 import warnings
 import numpy as np
+from custom_logging import get_logger, CustomLogger
 from typing import List, Dict, Any, Optional
 from abc import ABC, abstractmethod
 from kinetics import Kinetics  
@@ -26,9 +27,9 @@ class Constituent(ABC):
         self.layer: Optional['Layer'] = None  # Reference to parent layer (set by Layer.add_constituent)
         self.kinetics: Optional[Kinetics] = None
         self.constitutive_model: Optional[ConstitutiveModel] = None # TODO: consider making this mandatory for SingleConstituent. Never initialized for MultiFiberFamilyConstituent.
+        self.logger: CustomLogger = get_logger(__name__)
         
         self.homeostatic_referential_density: Optional[float] = None
-        self.deposition_stretch_scalar: Optional[float] = None
         self.deposition_stretch: Optional[np.ndarray] = None
 
         # Active stress properties (optional - only for contractile constituents)
@@ -41,13 +42,14 @@ class Constituent(ABC):
         self.sigma_hat_act_history = []  # [σ^_act(0), σ^_act(1), ...] (tensors)
         self.active_stress_history = []  # [σ_act(0), σ_act(1), ...] (tensors)
 
-        # Referential mass density evolution (rhoR_alpha) - timestep-indexed history
+        # Mass density and kinetic variables histories
         self.rhoR_alpha_history = []  # List of mass densities over time
         self.survival_history = [] # List of survival fractions over time (for each cohort)
         self.k_alpha_history = []  # List of degradation rates of survival function over time
         self.mR_alpha_history = []  # List of production rates over time
         self.stimulus_function_history = []  # List of stimulus function values over time #TODO: only stored for plot currently, streamline with Plotting class
 
+        # Deformation and stress histories
         self.F_alpha_history: List[List[np.ndarray]] = []
         self.sigma_hat_history: List[List[np.ndarray]] = []  # List of constituent-based partial stress over time TODO: perhaps make temporary array?
         self.stress_history: List[np.ndarray] = []
@@ -180,9 +182,7 @@ class SingleConstituent(Constituent):
          
     @classmethod
     def from_parameters(cls, name: str, properties: Dict[str, Any], layer: 'Layer' = None) -> 'SingleConstituent':
-        """Create and fully initialize single constituent from parameters."""
-        print(f"    Initializing single constituent: {name}")
-        
+        """Create and fully initialize single constituent from parameters."""        
         constituent = cls(name)
 
         # Set layer reference immediately if provided
@@ -192,12 +192,10 @@ class SingleConstituent(Constituent):
         # Initialize homeostatic mass density (t=0)
         constituent.homeostatic_referential_density = properties['mass_fraction'] * 1050.0
         constituent.rhoR_alpha_history.append(constituent.homeostatic_referential_density)
-        print(f"        Homeostatic mass density (rhoR_alpha at t=0): {constituent.homeostatic_referential_density:.2f} kg/m³")
 
         # Initialize constitutive model
         if 'constitutive_model' in properties:
             constituent.constitutive_model = ConstitutiveModel.from_parameters(properties['constitutive_model'])
-            print(f"        Constitutive model: {constituent.constitutive_model}")
         
         # Initialize active properties if present
         if 'active_properties' in properties:
@@ -211,8 +209,6 @@ class SingleConstituent(Constituent):
         if 'kinetics' in properties:
             constituent.kinetics = Kinetics.from_parameters(properties['kinetics'])
             constituent._initialize_homeostatic_kinetics()
-        else:
-            print(f"        No kinetics (elastin-like constituent)")
         
         # TODO: Set tau_min based on constituent type
 
@@ -246,7 +242,7 @@ class SingleConstituent(Constituent):
                 f"deposition_stretch must be a scalar, got {type(deposition_stretch_input)}"
             )
         
-        self.deposition_stretch_scalar = float(deposition_stretch_input)
+        deposition_stretch_scalar = float(deposition_stretch_input)
 
         has_fiber = (
             self.constitutive_model is not None and 
@@ -287,23 +283,16 @@ class SingleConstituent(Constituent):
             
             # Create tensor with ones except fiber direction
             self.deposition_stretch = np.eye(3)
-            self.deposition_stretch[fiber_component, fiber_component] = self.deposition_stretch_scalar
-            
-            print(f"        Deposition stretch: λ_dep = {self.deposition_stretch_scalar:.2f} (fiber-only)")
-            print(f"        Fiber angle: {fiber_angle:.1f}° → {coord_name}")
-            print(f"        G_α = diag({self.deposition_stretch[0,0]:.2f}, "
-                f"{self.deposition_stretch[1,1]:.2f}, {self.deposition_stretch[2,2]:.2f})")
+            self.deposition_stretch[fiber_component, fiber_component] = deposition_stretch_scalar
             
         else:
             # MODE 1: ISOTROPIC 3D DEPOSITION #TODO: rename
             # Incompressibility: λ_r · λ_θ · λ_z = 1
             # If λ_θ = λ_z = λ, then λ_r = 1/λ²
-            lambda_r = 1.0 / (self.deposition_stretch_scalar ** 2)
-            self.deposition_stretch = np.diag([lambda_r, self.deposition_stretch_scalar, self.deposition_stretch_scalar])
-            
-            print(f"        Deposition stretch: λ_dep = {self.deposition_stretch_scalar:.2f} (isotropic 3D)")
-            print(f"        G_α = diag({lambda_r:.4f}, {self.deposition_stretch_scalar:.2f}, {self.deposition_stretch_scalar:.2f})")
+            lambda_r = 1.0 / (deposition_stretch_scalar ** 2)
+            self.deposition_stretch = np.diag([lambda_r, deposition_stretch_scalar, deposition_stretch_scalar])
 
+            
     def _initialize_homeostatic_kinetics(self) -> None:
         """Initialize kinetics histories at t=0 (homeostatic state).
         
@@ -313,9 +302,7 @@ class SingleConstituent(Constituent):
         - Production = Degradation (steady state)
         - mR_h = rhoR_h * k_alpha_h
         - q(0,0) = 1.0 (just deposited material survives 100%)
-        """
-        print(f"        Homeostatic kinetics:")
-               
+        """              
         # Get homeostatic degradation rate from degradation function
         k_alpha_h = self.kinetics.degradation_function.k_alpha_h
         
@@ -331,11 +318,6 @@ class SingleConstituent(Constituent):
         # Initialize survival history
         # At t=0, we have one cohort deposited at τ=0 with q(0,0) = 1.0
         self.survival_history.append([1.0])
-        
-        # Print summary
-        print(f"          k_alpha(0) = {k_alpha_h:.6f} 1/day")
-        print(f"          mR_alpha(0) = {mR_alpha_h:.6f} kg/(m³·day)")
-        print(f"          q(0,0) = 1.0")
 
     def _initialize_active_properties(self, active_props: Dict[str, float]) -> None:
         """Initialize active properties for contractile constituents (e.g., SMCs).
@@ -349,8 +331,6 @@ class SingleConstituent(Constituent):
                 - CB: Basal calcium concentration (-)
                 - CS: Shear stress sensitivity (optional, default=0)
         """
-        print("        Active properties:")
-        
         self.is_active = True
         
         # Unit conversions
@@ -378,14 +358,6 @@ class SingleConstituent(Constituent):
         # Active stress at homeostasis (compute using homeostatic conditions)
         sigma_hat_act_h = self._compute_active_stress_at_homeostasis()
         self.sigma_hat_act_history.append(sigma_hat_act_h)
-        
-        # Print summary
-        print(f"          T_act = {active_props['T_act_h']:.1f} kPa")
-        print(f"          k_act = {self.active_properties['k_act']:.6f} 1/day")
-        print(f"          λ_0 = {self.active_properties['lambda_0']:.2f}, λ_m = {self.active_properties['lambda_m']:.2f}")
-        print(f"          CB = {self.active_properties['CB']:.4f}")
-        print(f"          a_act(0) = {a_h*1000:.4f} mm")
-        print(f"          σ_hat_act(0) = {sigma_hat_act_h/1000:.2f} kPa")
 
     # =========================================================================
     # COMPUTATION: MASS DENSITY
@@ -850,6 +822,155 @@ class SingleConstituent(Constituent):
 
         return data
 
+    
+    # =========================================================================
+    # OUTPUT: PRINTING
+    # =========================================================================
+
+    def print_state(self, timestep: int = None, logger: Optional[CustomLogger] = None):
+        """Print constituent state.
+        
+        Args:
+            timestep: Timestep to print (None = homeostatic)
+            logger: Logger to use for printing. 
+                    If None, uses own logger (when called standalone).
+                    If provided, uses that logger (when called within parent context).
+            
+        TODO: To refactor individual print functions after refactoring of classes.
+        """
+        # Use provided logger (for nesting) or own logger (for standalone)
+        if logger is None:
+            logger = self.logger
+            
+        if timestep is None:
+            box_title = f"Constituent: {self.name}"
+        else:
+            box_title = f"Constituent: {self.name} (t={timestep})"
+        
+        with logger.box(box_title, width=50):
+            self._print_mass_fraction(logger, timestep)
+            self._print_deposition_stretch(logger)
+            self._print_constitutive_model(logger)
+            
+            if self.is_active:
+                self._print_active_properties(logger)
+            
+            if self.kinetics is not None:
+                self._print_kinetics(logger)
+
+    def _print_mass_fraction(self, logger: CustomLogger, timestep: int):
+        """Print mass fraction and density."""
+        if timestep is None:
+            mass_fraction = self.homeostatic_referential_density / self.layer.homeostatic_density
+            rho_alpha = self.homeostatic_referential_density
+        else:
+            rho_alpha = self.get_rhoR_alpha(timestep)
+            mass_fraction = rho_alpha / self.layer.get_density(timestep)
+        
+        logger.box_item_aligned("Mass fraction:", f"{mass_fraction:.2f} ({rho_alpha:.2f} kg/m³)", label_width=20)
+
+    def _print_deposition_stretch(self, logger: CustomLogger):
+        # TODO: Refactor to generalize for anisotropic deposition stretch in the future.
+        """Print deposition stretch."""
+        G = self.deposition_stretch
+        lambda_r = G[0, 0]
+        lambda_theta = G[1, 1]
+        lambda_z = G[2, 2]
+        
+        logger.box_item_aligned("Deposition stretch:", f"[{lambda_r:.2f}, {lambda_theta:.2f}, {lambda_z:.2f}]", label_width=20)
+
+    def _print_constitutive_model(self, logger: CustomLogger):
+        # TODO: Refactor to remove hardcoded parts, by automatically getting this info from constitutve_laws.py.
+        """Print constitutive model information."""
+        logger.box_section("Constitutive Model")
+        
+        # Get model type name
+        model_type = self.constitutive_model.__class__.__name__
+        logger.box_item_aligned("Type:", f"{model_type}", label_width=20)
+        
+        # Print parameters based on model type
+        if model_type == "NeoHookeanModel":
+            c_kPa = self.constitutive_model.c / 1000
+            logger.box_item_aligned(f"Parameters:", f"c = {c_kPa:.1f} kPa", label_width=20)
+        
+        elif model_type == "FungExponentialModel":
+            c1_kPa = self.constitutive_model.c1 / 1000
+            c2 = self.constitutive_model.c2
+            logger.box_item_aligned(f"Parameters:", f"c1 = {c1_kPa:.1f} kPa, c2 = {c2:.1f}", label_width=20)
+            
+            # Print fiber orientation if present
+            if hasattr(self.constitutive_model, 'fiber_angle_degrees') and self.constitutive_model.fiber_angle_degrees is not None:
+                angle = self.constitutive_model.fiber_angle_degrees
+                if angle == 90.0:
+                    orientation = "circumferential"
+                elif angle == 0.0:
+                    orientation = "axial"
+                else:
+                    orientation = f"{angle}°"
+                logger.box_item_aligned("Fiber orientation:", f"{angle}° ({orientation})", label_width=20)
+
+    def _print_active_properties(self, logger: CustomLogger):
+        # TODO: Refactor when active stress class has been implemented.
+        """Print active stress properties (for contractile constituents)."""
+        logger.box_section("Active Properties")
+        
+        # Convert to display units
+        T_act_kPa = self.active_properties['T_act'] / 1000
+        k_act = self.active_properties['k_act']
+        lambda_0 = self.active_properties['lambda_0']
+        lambda_m = self.active_properties['lambda_m']
+        CB = self.active_properties['CB']
+        CS = self.active_properties['CS']
+        
+        logger.box_item_aligned(f"T_act_h:", f"{T_act_kPa:.2f} kPa", label_width=20)
+        logger.box_item_aligned(f"k_act:", f"{k_act:.3f} 1/day", label_width=20)
+        logger.box_item_aligned(f"λ_0:", f"{lambda_0:.3f}", label_width=20)
+        logger.box_item_aligned(f"λ_m:", f"{lambda_m:.3f}", label_width=20)
+        logger.box_item_aligned(f"CB:", f"{CB:.3f}", label_width=20)
+        logger.box_item_aligned(f"CS:", f"{CS:.3f}", label_width=20)
+
+    def _print_kinetics(self, logger: CustomLogger):
+        # TODO: Refactor to remove hardcoded parts, by automatically getting this info from kinetics.
+        """Print kinetics information."""        
+        # =========================================================================
+        # PRODUCTION
+        # =========================================================================
+        prod_func = self.kinetics.production_function
+        prod_type = prod_func.__class__.__name__
+
+        logger.box_section("Kinetics - Mass Production")     
+        if prod_type == "LinearProductionRate":
+            gains_str = ", ".join([f"K_{k} = {v}" for k, v in prod_func.gain_params.items()])
+            logger.box_item_aligned("Stimulus function:", f"Linear", label_width=30)
+            logger.box_item_aligned("Gain parameters:", f"{gains_str}", label_width=30)
+        else:
+            # Other production types (future)
+            pass
+    
+        # =========================================================================
+        # DEGRADATION
+        # =========================================================================
+        deg_func = self.kinetics.degradation_function
+        k_alpha_h = deg_func.k_alpha_h
+        deg_type = deg_func.__class__.__name__
+        
+        logger.box_section("Kinetics - Mass Degradation") 
+        if deg_type == "ConstantDegradationRate":
+            logger.box_item_aligned(f"Survival function:", "Exponential", label_width=30)
+            logger.box_item_aligned(f"Degradation rate function:", "Constant", label_width=30)
+            logger.box_item_aligned("Homeostatic deg. rate:", f"k_alpha_h = {k_alpha_h:.4f} 1/day", label_width=30)
+        elif deg_type == "QuadraticDegradationRate":
+            logger.box_item_aligned(f"Survival function:", "Exponential", label_width=30)
+            # Print rate modulation if gains present
+            if deg_func.gain_params:
+                gains_str = ", ".join([f"K_{k} = {v}" for k, v in deg_func.gain_params.items()])
+                logger.box_item_aligned(f"Degradation rate function:", f"Quadratic", label_width=30)
+                logger.box_item_aligned("Homeostatic deg. rate:", f"k_alpha_h = {k_alpha_h:.4f} 1/day", label_width=30)
+                logger.box_item_aligned("Gain parameters:", f"{gains_str}", label_width=30)     
+        else:
+            # Other degradation types (future)
+            pass
+                            
 # =========================================================================
 # MULTI-FIBER FAMILY CONSTITUENT IMPLEMENTATION
 # =========================================================================
@@ -870,9 +991,7 @@ class MultiFiberFamilyConstituent(Constituent):
         
     @classmethod
     def from_parameters(cls, name, properties):
-        """Create and fully initialize multi-fiber family constituent from parameters."""
-        print(f"    Initializing multi-fiber family constituent: {name}")
-        
+        """Create and fully initialize multi-fiber family constituent from parameters."""      
         constituent = cls(name)
         
         # Store shared properties
@@ -946,8 +1065,6 @@ class MultiFiberFamilyConstituent(Constituent):
             print(f"        No kinetics for multi-fiber constituent")
             return
         
-        print(f"        Total homeostatic kinetics:")
-        
         # Sum kinetics values from all fiber families at t=0
         total_k_alpha_h = sum(
             family.k_alpha_history[0] for family in self.fiber_families
@@ -962,10 +1079,6 @@ class MultiFiberFamilyConstituent(Constituent):
         
         # Survival history for multi-fiber is aggregate (same as fiber families)
         self.survival_history.append([1.0])
-        
-        print(f"          k_alpha(0) = {total_k_alpha_h:.6f} 1/day")
-        print(f"          mR_alpha(0) = {total_mR_alpha_h:.6f} kg/(m³·day)")
-        print(f"          q(0,0) = 1.0")
 
     # =========================================================================
     # COMPUTATION: MASS DENSITY

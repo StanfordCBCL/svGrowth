@@ -81,7 +81,7 @@ class Simulation:
 
         self._setup_outputs()
 
-        self.logger.info("Starting G&R simulation")
+        self.logger.section("Starting G&R simulation")
         self.logger.info(f"Steps: {self.n_steps}, dt: {self.dt}")
 
         # Write initial state (t=0, homeostatic)
