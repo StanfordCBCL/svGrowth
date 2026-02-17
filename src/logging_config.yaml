@@ -11,8 +11,8 @@ logging:
       format: '%(message)s'
     
     # With module name: [module_name] message
-    with_module:
-      format: '[%(name)s] %(message)s'
+    with_log_level:
+      format: '[%(levelname)s] %(message)s'
     
     # Full details: [LEVEL] module_name: message
     detailed:
@@ -26,7 +26,7 @@ logging:
     console:
       class: logging.StreamHandler
       level: DEBUG                    # Minimum level for this handler
-      formatter: detailed             # Use detailed format
+      formatter: with_log_level           
       stream: ext://sys.stdout        # Print to stdout
     
     # File handler - writes to file
@@ -34,7 +34,7 @@ logging:
       class: logging.FileHandler
       level: DEBUG                    # Log everything to file
       filename: simulation_debug.log  # Output file
-      formatter: detailed             # Use detailed format for file
+      formatter: with_log_level       
       mode: w                         # 'w' = overwrite, 'a' = append
 
   # =========================================================================

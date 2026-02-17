@@ -292,7 +292,7 @@ class FixedPointSolver:
             if all_converged:
                 converged = True
                 self.logger.info(
-                    f"✓ Fixed-point converged in {iteration} iterations "
+                    f"✓ Fixed-point solver converged in {iteration} iterations "
                     f"(max Δρ/ρ = {max_change:.2e})"
                 )
                 break

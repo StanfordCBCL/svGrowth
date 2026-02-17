@@ -21,7 +21,6 @@ class Configuration:
     @classmethod
     def from_parameters(cls, params: Dict[str, Any]) -> 'Configuration':
         """Create and fully initialize Configuration from parameter dictionary."""
-        #print("Initializing vessel configuration...")
         cls._validate_parameters(params)
         
         config = cls(params)
@@ -31,13 +30,12 @@ class Configuration:
             layer = Layer.from_parameters(layer_data)
             config.add_layer(layer)
         
-        # Compute homeostatic stress (direct method - no simulation params needed)
         # TODO: integrate this into Layer.from_parameters.
-        #print("\nComputing homeostatic stresses...")
         for layer in config.layers:
             layer.compute_homeostatic_stress_direct()
-    
-        #print(f"\nConfiguration initialized with {len(config.layers)} layers")
+
+        config.print_state()       
+
         return config
 
     @staticmethod
@@ -316,3 +314,28 @@ class Configuration:
                         const_data,
                         layer_name=layer.name
                     )
+
+# =========================================================================
+# OUTPUT: PRINTING
+# =========================================================================
+
+    def print_state(self, timestep: int = None):
+        """Print configuration state.
+        
+        Prints state of all layers and their constituents at specified timestep.
+            
+        Args:
+            timestep: Timestep to print data from. If None, prints homeostatic state.
+            
+        Examples:
+            config.print_state()            # Homeostatic state
+            config.print_state(timestep=10) # At timestep 10
+        """
+        if timestep is None:
+            self.logger.section("HOMEOSTATIC CONFIGURATION", log_level='INFO')
+        else:
+            self.logger.section(f"CONFIGURATION AT TIMESTEP {timestep}", log_level='INFO')
+        
+        # Print each layer
+        for layer in self.layers:
+            layer.print_state(timestep=timestep, logger=self.logger)

@@ -1,4 +1,6 @@
+from turtle import title
 import numpy as np
+from custom_logging import get_logger, CustomLogger
 from typing import List, Dict, Any, Optional
 from constituent import Constituent
 from deformation_kinematics import DeformationKinematics, KinematicsFactory
@@ -16,6 +18,7 @@ class Layer:
         self.kinematics: Optional[DeformationKinematics] = None
         self.mechanics = Mechanics()
         self.perturbation_manager = PerturbationManager(scope='layer')
+        self.logger: CustomLogger = get_logger(__name__)
         
         # Homeostatic geometry (= reference configuration in G&R)
         self.homeostatic_inner_radius: Optional[float] = None
@@ -50,6 +53,8 @@ class Layer:
         self.flow_rate_history: List[float] = []
         self.wss_history: List[float] = []
 
+
+
     # =========================================================================
     # INITIALIZATION
     # =========================================================================
@@ -71,10 +76,8 @@ class Layer:
             
         Returns:
             Fully initialized Layer instance
-        """
-        print(f"\nInitializing layer: {layer_data['layer_name']}")
-        
-        # Step 1: Create empty layer (just name)
+        """      
+        # Step 1: Create empty layer
         layer = cls(name=layer_data['layer_name'])
 
         # STEP 2: Set kinematics from geometry type
@@ -95,9 +98,7 @@ class Layer:
         )
 
         # Step 4: Initialize constituents for this layer
-        constituents = layer_data['constituents']
-        print(f"  Constituents ({len(constituents)} total):")
-        
+        constituents = layer_data['constituents']        
         for name, properties in constituents.items():
             constituent = Constituent.from_parameters(name, properties, layer)
             layer.add_constituent(constituent)
@@ -110,9 +111,9 @@ class Layer:
     
     def set_kinematics(self, geometry_type: str) -> None:
         """Set kinematics for this layer."""
+        # TODO: validation should happen at the inputfile leve, not when setting kinematics.
         try:
             self.kinematics = KinematicsFactory.create(geometry_type)
-            print(f"    Kinematics set: {type(self.kinematics).__name__}")
         except ValueError as e:
             available_types = KinematicsFactory.available_types()
             raise ValueError(
@@ -145,9 +146,7 @@ class Layer:
             rhoR_h: Homeostatic mass density (kg/m³)
         """
         self._ensure_kinematics_set()
-        
-        print("  Homeostatic geometry:")
-        
+    
         # Unit conversions
         mm_to_m = 1.0e-3
         kPa_to_Pa = 1.0e3
@@ -197,19 +196,6 @@ class Layer:
         self.flow_rate_history = [self.homeostatic_flow_rate]
         self.wss_history = [self.homeostatic_wss]
 
-
-        # Print summary
-        print(f"    Inner radius (a_h): {a_h} mm → {self.homeostatic_inner_radius:.6f} m")
-        print(f"    Thickness (h_h): {h_h} mm → {self.homeostatic_thickness:.6f} m")
-        print(f"    Axial stretch (λ_z_h): {self.homeostatic_axial_stretch}")
-        print(f"    Reference density (ρ_h): {self.homeostatic_density} kg/m³")
-        print(f"    Loading:")
-        print(f"      P_h = {pressure_h} kPa → {self.homeostatic_pressure:.2f} Pa")
-        print(f"      Q_h = {flow_rate_h} m³/day")
-        print(f"      μ = {self.blood_viscosity*1000:.2f} mPa·s")        
-        print(f"    Wall shear stress (computed):")
-        print(f"      WSS_h = {self.homeostatic_wss:.4f} Pa")
-
     def _initialize_perturbations(self, perturbations_config: Dict[str, Any]):
         """Initialize perturbations from configuration.
         
@@ -220,8 +206,6 @@ class Layer:
         for variable_name, pert_config in perturbations_config.items():
             perturbation = PerturbationFactory.create(pert_config)
             self.perturbation_manager.add_perturbation(variable_name, perturbation)
-
-            print(f"    Registered perturbation for '{variable_name}': {perturbation}")
        
     def _ensure_kinematics_set(self) -> None:
         """Ensure kinematics has been set before use."""
@@ -320,11 +304,10 @@ class Layer:
         
         return {
             'inner_radius': self.homeostatic_inner_radius,
-            'thickness': self.homeostatic_thickness,
             'mid_radius': self.homeostatic_mid_radius,
             'outer_radius': self.homeostatic_outer_radius,
+            'thickness': self.homeostatic_thickness,
             'axial_stretch': self.homeostatic_axial_stretch,
-            'density': self.homeostatic_density
         }
 
     # ========================================================================
@@ -383,12 +366,10 @@ class Layer:
         """Return layer geometry at specified timestep."""
         return {
             'inner_radius': self.get_inner_radius(timestep),
-            'thickness': self.get_thickness(timestep),
             'mid_radius': self.get_mid_radius(timestep),
             'outer_radius': self.get_outer_radius(timestep),
-            'axial_stretch': self.get_axial_stretch(timestep),
-            'density': self.get_density(timestep),
-            'stress': self.get_stress(timestep)
+            'thickness': self.get_thickness(timestep),
+            'axial_stretch': self.get_axial_stretch(timestep)
         }
 
     # ========================================================================
@@ -633,53 +614,39 @@ class Layer:
 
         This avoids integration issues at t=0.
         """
-        print(f"  Computing homeostatic stress for layer '{self.name}' (direct method)")
-
         sigma_total = np.zeros((3, 3))
 
-        for constituent in self.constituents:
-            print(f"    {constituent.name}:")
-        
+        for constituent in self.constituents:        
             # Get constituent properties
             rho_alpha = constituent.homeostatic_referential_density
             rho_h = self.homeostatic_density
             G_alpha = constituent.deposition_stretch
         
-            print(f"      ρ_α = {rho_alpha:.2f} kg/m³, ρ_h = {rho_h:.2f} kg/m³")
-            print(f"      Mass fraction = {rho_alpha/rho_h:.4f}")
-            print(f"      G_α diagonal = [{G_alpha[0,0]:.3f}, {G_alpha[1,1]:.3f}, {G_alpha[2,2]:.3f}]")
-        
             # Compute F_α(0,0) = G_α
             F_alpha = G_alpha
-            print(f"      F_α diagonal = [{F_alpha[0,0]:.3f}, {F_alpha[1,1]:.3f}, {F_alpha[2,2]:.3f}]")
         
             # Compute C_α
             C_alpha = F_alpha.T @ F_alpha
-            print(f"      C_α diagonal = [{C_alpha[0,0]:.3f}, {C_alpha[1,1]:.3f}, {C_alpha[2,2]:.3f}]")
         
             # Get constitutive model
             model = constituent.constitutive_model
         
             # ✅ NEW: Compute S_hat_α from constitutive law
             S_hat_alpha = model.compute_PK2_stress(F_alpha)
-            print(f"      S_hat_α (PK2 stress) diagonal = [{S_hat_alpha[0,0]:.2f}, {S_hat_alpha[1,1]:.2f}, {S_hat_alpha[2,2]:.2f}] Pa")
         
             # ✅ NEW: Compute σ̂_α (push-forward)
             # TODO: compute from the ratio of J from layer. Currently hardcoded to 1 for testing.
             # J_alpha = np.linalg.det(F_alpha)
             J_alpha = 1
-            print(f"      J_α = {J_alpha:.4f}")
             
             sigma_hat_alpha = (1.0 / J_alpha) * (F_alpha @ S_hat_alpha @ F_alpha.T)
-            print(f"      σ̂_α (Cauchy stress) diagonal = [{sigma_hat_alpha[0,0]:.2f}, {sigma_hat_alpha[1,1]:.2f}, {sigma_hat_alpha[2,2]:.2f}] Pa")
 
             # Store sigma_hat_alpha at homeostasis for use in heredity integrals
             constituent.sigma_hat_history.append([sigma_hat_alpha])
 
             # Weight by mass fraction (PASSIVE STRESS)
             sigma_alpha_passive = (rho_alpha / rho_h) * sigma_hat_alpha
-            print(f"      σ_α (passive, weighted) diagonal = [{sigma_alpha_passive[0,0]/1000:.2f}, {sigma_alpha_passive[1,1]/1000:.2f}, {sigma_alpha_passive[2,2]/1000:.2f}] kPa")
-            
+ 
             # Start with passive stress
             sigma_alpha = sigma_alpha_passive.copy()
         
@@ -690,9 +657,6 @@ class Layer:
                 # Weight by mass fraction
                 sigma_act_weighted = (rho_alpha / rho_h) * sigma_act
                 
-                print(f"      σ_act(0) = {sigma_act/1000:.2f} kPa (unweighted)")
-                print(f"      σ_act(0, weighted) = {sigma_act_weighted/1000:.2f} kPa")
-                
                 # Add to circumferential component
                 sigma_alpha[1, 1] += sigma_act_weighted
 
@@ -701,29 +665,11 @@ class Layer:
 
             # Accumulate
             sigma_total += sigma_alpha
-        
-            print(f"      σ_α(0) TOTAL diagonal = [{sigma_alpha[0,0]/1000:.2f}, "
-                f"{sigma_alpha[1,1]/1000:.2f}, {sigma_alpha[2,2]/1000:.2f}] kPa")
-
-        # ✅ NEW: Print total before constraint
-        print(f"\n    Total stress BEFORE constraint:")
-        print(f"      σ_total diagonal = [{sigma_total[0,0]/1000:.2f}, "
-            f"{sigma_total[1,1]/1000:.2f}, {sigma_total[2,2]/1000:.2f}] kPa")
 
         # Apply kinematic constraint
         lagrange = self.kinematics.compute_lagrange_multiplier(sigma_total)
         
-        # ✅ NEW: Print Lagrange multiplier
-        print(f"    Lagrange multiplier:")
-        print(f"      λ diagonal = [{lagrange[0,0]/1000:.2f}, "
-            f"{lagrange[1,1]/1000:.2f}, {lagrange[2,2]/1000:.2f}] kPa")
-        
         sigma_constrained = sigma_total - lagrange
-
-        # ✅ NEW: Print total after constraint
-        print(f"    Total stress AFTER constraint:")
-        print(f"      σ_constrained diagonal = [{sigma_constrained[0,0]/1000:.2f}, "
-            f"{sigma_constrained[1,1]/1000:.2f}, {sigma_constrained[2,2]/1000:.2f}] kPa")
 
         # Store
         self.homeostatic_stress = sigma_constrained
@@ -1158,6 +1104,138 @@ class Layer:
             'flow_rate': self.get_flow_rate(timestep),
             'wss': self.get_wss(timestep)
         }
+
+    # =========================================================================
+    # OUTPUT: PRINT SUMMARY
+    # =========================================================================
+
+    def print_state(self, timestep: int = None, logger: Optional[CustomLogger] = None):
+        """Print layer state.
+        
+        Args:
+            timestep: Timestep to print. If None, prints homeostatic state.
+            logger: Logger to use for printing.
+                If None, uses own logger (standalone mode).
+                If provided, uses that logger (nested mode).
+            
+        Examples:
+            layer.print_state()                    # Homeostatic, standalone
+            layer.print_state(timestep=10)         # At timestep 10, standalone
+            layer.print_state(timestep=10, logger=config.logger)  # Nested in config
+        """
+        # Use provided logger (for nesting) or own logger (for standalone)
+        if logger is None:
+            logger = self.logger
+    
+        if timestep is None:
+            box_title = f"Layer: {self.name}"
+        else:
+            box_title = f"Layer: {self.name} (timestep={timestep})"
+    
+        with logger.box(box_title):
+            self._print_content(timestep)
+    
+    def _print_content(self, timestep: int):
+        """Print layer content (shared by standalone and nested modes)."""
+        self.logger.box_line(f"Kinematics: {self.kinematics.__class__.__name__}")
+        self.logger.box_line(f"Constituents: {len(self.constituents)}")
+
+        self._print_mass(timestep)       
+        self._print_geometry(timestep)
+        self._print_loading(timestep)
+        self._print_stress(timestep)
+        
+        for constituent in self.constituents:
+            self.logger.box_line()
+            constituent.print_state(timestep=timestep, logger=self.logger)
+            
+
+    def _print_geometry(self, timestep: int):
+        """Print geometry section using kinematics metadata.
+        
+        TODO: Refactor kinematics to use registry pattern for variable metadata.
+        For now, this is a simplified implementation that will be replaced when
+        deformation_kinematics.py is restructured to define component symbols,
+        variable names, units, etc. in a systematic registry.
+        """
+        # Determine title
+        if timestep is None:
+            box_title = "Homeostatic Geometry"
+            geometry = self.get_homeostatic_geometry()
+        else:
+            box_title = f"Geometry (t={timestep})"
+            geometry = self.get_geometry(timestep)
+        
+        self.logger.box_section(box_title)
+        
+        # TODO: Replace with kinematics.get_geometry_display_info() once registry is implemented
+        # For now, hardcode thin-wall variables
+        
+        # Inner radius
+        a_mm = geometry['inner_radius'] * 1e3
+        h_mm = geometry['thickness'] * 1e3
+        lambda_z = geometry['axial_stretch']
+
+        if timestep is None:
+            self.logger.box_item_aligned("Inner radius (a_h):", f"{a_mm:.4f} mm", label_width=25)
+            self.logger.box_item_aligned("Thickness (h_h):", f"{h_mm:.4f} mm", label_width=25)
+            self.logger.box_item_aligned("Axial stretch (λ_z_h):", f"{lambda_z:.4f}", label_width=25)
+        else:
+            self.logger.box_item_aligned("Inner radius (a):", f"{a_mm:.4f} mm", label_width=25)
+            self.logger.box_item_aligned("Thickness (h):", f"{h_mm:.4f} mm", label_width=25)
+            self.logger.box_item_aligned("Axial stretch (λ_z):", f"{lambda_z:.4f}", label_width=25)
+            
+    def _print_loading(self, timestep: int):
+        """Print loading variables."""
+        # TODO: refactor
+        if timestep is None:
+            P_kPa = self.homeostatic_pressure * 1e-3
+            Q = self.homeostatic_flow_rate
+            wss_kPa = self.homeostatic_wss * 1e-3
+            box_title = "Homeostatic Loading"
+            suffix = "_h"
+        else:
+            P_kPa = self.get_pressure(timestep) * 1e-3
+            Q = self.get_flow_rate(timestep)
+            wss_kPa = self.get_wss(timestep) * 1e-3
+            box_title = f"Loading (timestep={timestep})"
+            suffix = ""
+        
+        self.logger.box_section(box_title)
+        self.logger.box_item_aligned(f"Pressure (P{suffix}):", f"{P_kPa:.2f} kPa", label_width=25)
+        self.logger.box_item_aligned(f"Flow rate (Q{suffix}):", f"{Q:.2f} m³/day", label_width=25)
+        # TODO: check wss computation and units (currently computing shear rate for Lattore2018)
+        #self.logger.box_item_aligned(f"WSS (τ_w{suffix}):", f"{wss_kPa:.2f} kPa", label_width=25)
+
+    def _print_mass(self, timestep: int):
+        """Print mass density."""
+        if timestep is None:
+            rho = self.homeostatic_density
+            box_title = "Homeostatic Mass Density"
+            suffix = "_h"
+        else:
+            rho = self.get_density(timestep)
+            box_title = f"Mass Density (timestep={timestep})"
+            suffix = ""
+        
+        self.logger.box_section(box_title)
+        self.logger.box_item_aligned(f"Referential mass density (ρ{suffix}):", f"{rho:.2f} kg/m³", label_width=25)
+        
+    def _print_stress(self, timestep: int):
+        """Print stress tensor."""
+        #TODO: Refactor to use kinematics.get_component_symbol(i) once registry is implemented
+        if timestep is None:
+            sigma = self.homeostatic_stress
+            box_title = "Homeostatic Intramural Stress (diagonal)"
+        else:
+            sigma = self.get_stress(timestep)
+            box_title = f"Intramural Stress (t={timestep}, diagonal)"
+        
+        self.logger.box_section(box_title)
+        for i in range(3):
+            component_symbol = ["rr", "θθ", "zz"][i]
+            stress_kPa = sigma[i, i] / 1000
+            self.logger.box_item_aligned(f"σ_{component_symbol}:", f"{stress_kPa:.2f} kPa", label_width=25)
 
     # def compute_homeostatic_stress_direct(self) -> None:
     #     """Compute homeostatic stress directly from constituent properties.

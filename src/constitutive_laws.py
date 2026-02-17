@@ -107,9 +107,6 @@ class ConstitutiveModel(ABC):
         
         # Store as unit vector
         self.fiber_orientation = a0 / np.linalg.norm(a0)
-        
-        print(f"        Fiber orientation: {angle_degrees}° → "
-              f"a0 = [{a0[0]:.3f}, {a0[1]:.3f}, {a0[2]:.3f}]")
     
     def is_isotropic(self):
         """Check if material is isotropic."""
