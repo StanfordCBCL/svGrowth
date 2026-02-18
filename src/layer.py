@@ -151,6 +151,7 @@ class Layer:
         mm_to_m = 1.0e-3
         kPa_to_Pa = 1.0e3
         Pa_s_to_Pa_day = 86400.0  # Pa·s → Pa·day (86400 s/day)
+        mL_per_s_to_m3_per_s = 1.0e-6  # mL/s → m³/s (1 mL = 1e-6 m³)
         
         # Set homeostatic values
         self.homeostatic_inner_radius = a_h * mm_to_m
@@ -158,8 +159,8 @@ class Layer:
         self.homeostatic_axial_stretch = lambda_z_h
         self.homeostatic_density = rhoR_h
         self.homeostatic_pressure = pressure_h * kPa_to_Pa
-        self.homeostatic_flow_rate = flow_rate_h # Store in m³/day (as input)
-        self.blood_viscosity = blood_viscosity  # Pa·s
+        self.homeostatic_flow_rate = flow_rate_h * mL_per_s_to_m3_per_s
+        self.blood_viscosity = blood_viscosity
 
         # Compute derived homeostatic values
         self.homeostatic_mid_radius = (
@@ -178,9 +179,9 @@ class Layer:
         
         # Initialize WSS
         self.homeostatic_wss = self.kinematics.compute_wss(
-            flow_rate_h,
+            self.homeostatic_flow_rate,
             self.homeostatic_inner_radius,
-            self.blood_viscosity*Pa_s_to_Pa_day
+            self.blood_viscosity 
         )
 
         # Initialize time history arrays with t=0 (homeostatic) values
@@ -1007,7 +1008,6 @@ class Layer:
         )
         
         self.wss_history[timestep] = wss
-        #print(f"    Updated WSS for layer '{self.name}': {wss:.6f} Pa (a={inner_radius*1000:.6f} mm)")
 
     def update_deformation_gradient(self, timestep: int) -> None:
         """Update deformation gradient at given timestep based on current geometry.
@@ -1190,22 +1190,21 @@ class Layer:
         # TODO: refactor
         if timestep is None:
             P_kPa = self.homeostatic_pressure * 1e-3
-            Q = self.homeostatic_flow_rate
-            wss_kPa = self.homeostatic_wss * 1e-3
+            Q = self.homeostatic_flow_rate * 1.0e6
+            wss = self.homeostatic_wss 
             box_title = "Homeostatic Loading"
             suffix = "_h"
         else:
             P_kPa = self.get_pressure(timestep) * 1e-3
-            Q = self.get_flow_rate(timestep)
-            wss_kPa = self.get_wss(timestep) * 1e-3
+            Q = self.get_flow_rate(timestep) * 1.0e6
+            wss = self.get_wss(timestep)
             box_title = f"Loading (timestep={timestep})"
             suffix = ""
         
         self.logger.box_section(box_title)
         self.logger.box_item_aligned(f"Pressure (P{suffix}):", f"{P_kPa:.2f} kPa", label_width=25)
-        self.logger.box_item_aligned(f"Flow rate (Q{suffix}):", f"{Q:.2f} m³/day", label_width=25)
-        # TODO: check wss computation and units (currently computing shear rate for Lattore2018)
-        #self.logger.box_item_aligned(f"WSS (τ_w{suffix}):", f"{wss_kPa:.2f} kPa", label_width=25)
+        self.logger.box_item_aligned(f"Flow rate (Q{suffix}):", f"{Q:.2f} mL/s", label_width=25)
+        self.logger.box_item_aligned(f"WSS (τ_w{suffix}):", f"{wss:.2f} Pa", label_width=25)
 
     def _print_mass(self, timestep: int):
         """Print mass density."""
