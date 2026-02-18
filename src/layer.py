@@ -1133,9 +1133,9 @@ class Layer:
             box_title = f"Layer: {self.name} (timestep={timestep})"
     
         with logger.box(box_title):
-            self._print_content(timestep)
+            self._print_content(timestep, logger)
     
-    def _print_content(self, timestep: int):
+    def _print_content(self, timestep: int, logger: CustomLogger):
         """Print layer content (shared by standalone and nested modes)."""
         self.logger.box_line(f"Kinematics: {self.kinematics.__class__.__name__}")
         self.logger.box_line(f"Constituents: {len(self.constituents)}")
@@ -1147,7 +1147,7 @@ class Layer:
         
         for constituent in self.constituents:
             self.logger.box_line()
-            constituent.print_state(timestep=timestep, logger=self.logger)
+            constituent.print_state(timestep=timestep, logger=logger)
             
 
     def _print_geometry(self, timestep: int):
