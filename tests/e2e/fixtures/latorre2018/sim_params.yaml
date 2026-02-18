@@ -46,7 +46,7 @@ layers:
     # --------------------------------------------------------------------------
     loading_variables:
       P_h: 14.18                 # kPa (homeostatic pressure)
-      Q_h: 1.0                   # dimensionless or m³/day (homeostatic flow)
+      Q_h: 1.0                   # mL/s (homeostatic flow)
       blood_viscosity: 0.004     # Pa*s (for wss calculation)
 
     # --------------------------------------------------------------------------

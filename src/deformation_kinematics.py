@@ -606,9 +606,7 @@ class ThinWallKinematics(DeformationKinematics):
             raise ValueError(f"Blood viscosity must be positive, got {blood_viscosity}")
         
         # Poiseuille WSS formula
-        # TODO: unclear why blood viscosity not used in Latorre 2018.
-        #wss = (4.0 * blood_viscosity * flow_rate) / (math.pi * inner_radius**3)
-        wss = flow_rate / inner_radius**3
+        wss = (4.0 * blood_viscosity * flow_rate) / (math.pi * inner_radius**3)
 
         return wss
 
