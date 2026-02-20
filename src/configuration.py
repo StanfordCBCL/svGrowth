@@ -251,6 +251,44 @@ class Configuration:
             layer.update_deformation_gradient(timestep)
 
     # =========================================================================
+    # PROPERTY ACCESSORS
+    # =========================================================================
+
+    def get_layer(self, name: str) -> Optional[Layer]:
+        """
+        Retrieve a layer by exact name match.
+        
+        Args:
+            name: Exact layer name (case-sensitive)
+            
+        Returns:
+            Layer object if found, None otherwise
+            
+        Example:
+            >>> layer = config.get_layer("Media")
+            >>> if layer is not None:
+            ...     print(layer.get_density(0))
+        """
+        for layer in self.layers:
+            if layer.name == name:
+                return layer
+        return None
+    
+    def get_layer_names(self) -> List[str]:
+        """
+        Get list of all layer names in this configuration.
+        
+        Returns:
+            List of layer names
+            
+        Example:
+            >>> names = config.get_layer_names()
+            >>> print(names)
+            ['Media', 'Adventitia']
+        """
+        return [layer.name for layer in self.layers]
+
+    # =========================================================================
     # OUTPUT: DATA EXPORT
     # =========================================================================
     
@@ -336,6 +374,5 @@ class Configuration:
         else:
             self.logger.section(f"CONFIGURATION AT TIMESTEP {timestep}", log_level='INFO')
         
-        # Print each layer
         for layer in self.layers:
             layer.print_state(timestep=timestep, logger=self.logger)
