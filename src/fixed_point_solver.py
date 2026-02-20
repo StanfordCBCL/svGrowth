@@ -11,6 +11,7 @@ This creates a fixed-point problem requiring iterative refinement.
 
 from typing import Dict, Any, Optional
 from custom_logging import get_logger
+from configuration import Configuration
 
 
 # =============================================================================
@@ -51,7 +52,7 @@ class ConvergenceChecker:
     
     def check_convergence(
         self,
-        configuration,
+        configuration: Configuration,
         timestep: int,
         rho_old: Dict[str, float]
     ) -> tuple[bool, float, Dict[str, float]]:
@@ -147,7 +148,7 @@ class FixedPointSolver:
     
     def solve(
         self,
-        configuration,
+        configuration: Configuration,
         timestep: int,
         dt: float,
         integration_method: str,
@@ -255,6 +256,7 @@ class FixedPointSolver:
             )
             
             # STEP B: Solve geometric equilibrium
+            #TODO: consider calling solver here. Then solver should call configuration.solve_equilibrium_geometry() and pass in the parameters.
             result = configuration.solve_equilibrium_geometry(
                 timestep=timestep,
                 dt=dt,

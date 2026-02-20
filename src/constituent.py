@@ -853,7 +853,7 @@ class SingleConstituent(Constituent):
             self._print_constitutive_model(logger)
             
             if self.is_active:
-                self._print_active_properties(logger)
+                self._print_active_stress_properties(logger)
             
             if self.kinetics is not None:
                 self._print_kinetics(logger)
@@ -909,10 +909,10 @@ class SingleConstituent(Constituent):
                     orientation = f"{angle}°"
                 logger.box_item_aligned("Fiber orientation:", f"{angle}° ({orientation})", label_width=20)
 
-    def _print_active_properties(self, logger: CustomLogger):
+    def _print_active_stress_properties(self, logger: CustomLogger):
         # TODO: Refactor when active stress class has been implemented.
         """Print active stress properties (for contractile constituents)."""
-        logger.box_section("Active Properties")
+        logger.box_section("Active Stress Properties")
         
         # Convert to display units
         T_act_kPa = self.active_properties['T_act'] / 1000

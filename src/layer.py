@@ -232,6 +232,40 @@ class Layer:
         """Add constituent to layer and set back-reference."""
         self.constituents.append(constituent)
 
+    def get_constituent(self, name: str) -> Optional[Constituent]:
+        """
+        Retrieve a constituent by exact name match.
+        
+        Args:
+            name: Exact constituent name (case-sensitive)
+            
+        Returns:
+            Constituent object if found, None otherwise
+            
+        Example:
+            >>> smc = layer.get_constituent("smooth_muscle_cells")
+            >>> if smc is not None:
+            ...     print(smc.get_rhoR_alpha(0))
+        """
+        for constituent in self.constituents:
+            if constituent.name == name:
+                return constituent
+        return None
+    
+    def get_constituent_names(self) -> List[str]:
+        """
+        Get list of all constituent names in this layer.
+        
+        Returns:
+            List of constituent names
+            
+        Example:
+            >>> names = layer.get_constituent_names()
+            >>> print(names)
+            ['elastin', 'smooth_muscle_cells', 'collagen']
+        """
+        return [c.name for c in self.constituents]
+
     def get_all_fiber_families(self) -> List[Constituent]:
         """Get all individual fiber families from all constituents."""
         all_families = []
@@ -245,7 +279,7 @@ class Layer:
                 all_families.append(constituent)
         
         return all_families
-    
+
     def get_constituent_summary(self) -> Dict[str, Dict[str, Any]]:
         """Get summary of constituents and fiber families."""
         summary = {}
@@ -1235,66 +1269,3 @@ class Layer:
             component_symbol = ["rr", "θθ", "zz"][i]
             stress_kPa = sigma[i, i] / 1000
             self.logger.box_item_aligned(f"σ_{component_symbol}:", f"{stress_kPa:.2f} kPa", label_width=25)
-
-    # def compute_homeostatic_stress_direct(self) -> None:
-    #     """Compute homeostatic stress directly from constituent properties.
-    
-    #     At homeostasis, bypass heredity integral and compute directly:
-    #     σ_α = (ρ_α/ρ_h) · σ̂_α(G_α)
-    
-    #     This avoids integration issues at t=0.
-    #     """
-    #     print(f"  Computing homeostatic stress for layer '{self.name}' (direct method)")
-    
-    #     sigma_total = np.zeros((3, 3))
-    
-    #     for constituent in self.constituents:
-    #         print(f"    {constituent.name}:")
-        
-    #         # Get constituent properties
-    #         rho_alpha = constituent.homeostatic_referential_density
-    #         rho_h = self.homeostatic_density
-    #         G_alpha = constituent.deposition_stretch
-        
-    #         # Compute F_α(0,0) = G_α
-    #         F_alpha = G_alpha
-        
-    #         # Get constitutive model
-    #         model = constituent.constitutive_model
-        
-    #         # Compute S_hat_α from constitutive law
-    #         S_hat_alpha = model.compute_PK2_stress(F_alpha)
-        
-    #         # Compute σ̂_α (push-forward)
-    #         J_alpha = np.linalg.det(F_alpha)
-    #         sigma_hat_alpha = (1.0 / J_alpha) * (F_alpha @ S_hat_alpha @ F_alpha.T)
-        
-    #         # Weight by mass fraction
-    #         sigma_alpha = (rho_alpha / rho_h) * sigma_hat_alpha
-        
-    #         # Add active stress if present
-    #         if constituent.is_active:
-    #             sigma_act = constituent._compute_active_stress_at_homeostasis()
-    #             sigma_alpha[1, 1] += (rho_alpha / rho_h) * sigma_act
-    #             print(f"      σ_act(0) = {sigma_act/1000:.2f} kPa")
-        
-    #         # Accumulate
-    #         sigma_total += sigma_alpha
-        
-    #         print(f"      σ_α(0) diagonal = [{sigma_alpha[0,0]/1000:.2f}, "
-    #               f"{sigma_alpha[1,1]/1000:.2f}, {sigma_alpha[2,2]/1000:.2f}] kPa")
-    
-    #     # Apply kinematic constraint
-    #     lagrange = self.kinematics.compute_lagrange_multiplier(sigma_total)
-    #     sigma_constrained = sigma_total - lagrange
-    
-    #     # Store
-    #     self.homeostatic_stress = sigma_constrained
-    #     self.stress_history[0] = sigma_constrained.copy()
-    
-    #     #TODO: add get_component_name and get_component_symbol methods to kinematics
-    #     # print(f"    Homeostatic stress (constrained):")
-    #     # for i in range(3):
-    #     #     component_name = self.kinematics.get_component_name(i)
-    #     #     stress_kPa = sigma_constrained[i, i] / 1000
-    #     #     print(f"      σ_{component_name[0]}(0) = {stress_kPa:.2f} kPa")

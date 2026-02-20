@@ -6,12 +6,14 @@ Follows adapter pattern - Solver operates on SolverContext interface.
 """
 
 from abc import ABC, abstractmethod
-from typing import Tuple, Optional
+from typing import Tuple, Optional, TYPE_CHECKING
 from scipy.optimize import root_scalar
 import numpy as np
 from custom_logging import get_logger
 
-
+if TYPE_CHECKING:
+    from layer import Layer
+    
 # =============================================================================
 # EXCEPTIONS
 # =============================================================================
@@ -96,7 +98,7 @@ class LayerEquilibriumContext(SolverContext):
     """
     
     def __init__(self,
-                 layer,
+                 layer: 'Layer',
                  timestep: int,
                  dt: float,
                  integration_method: str,

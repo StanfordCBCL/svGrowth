@@ -473,6 +473,7 @@ def init_logging(log_level: str, config_file: str = 'logging_config.yaml') -> No
         )
     
     # Load logging infrastructure from YAML
+    # TODO: config file currently don't work if not in root dir. Consider making path handling more robust.
     config_path = Path(config_file)
     
     if config_path.exists():
