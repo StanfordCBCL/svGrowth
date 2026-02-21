@@ -6,263 +6,115 @@
 
 [![Test Status](https://github.com/StanfordCBCL/svGrowth/actions/workflows/test.yaml/badge.svg)](https://github.com/StanfordCBCL/svGrowth/actions/workflows/test.yaml)
 [![codecov](https://codecov.io/gh/StanfordCBCL/svGrowth/branch/main/graph/badge.svg)](https://codecov.io/gh/StanfordCBCL/svGrowth)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 ![Platform](https://img.shields.io/badge/platform-macOS%20|%20Ubuntu-blue)
 
 </div>
 
-<p style="text-align: center;"> svGrowth is a modular computational framework for simulating growth and remodeling (G&R) in biological tissues based on the constrained mixture theory. </p>
+<div align="center">
 
-<p style="text-align: center;"> svGrowth is currently in development. </p>
+svGrowth is a modular computational framework for simulating growth and remodeling (G&R) in biological tissues based on the constrained mixture theory. 
 
-<h1></h1>
+🚧 svGrowth is currently in early development. API is subject to change. 🚧
+</div>
 
-### Key Features
+---
 
-- **Constrained mixture theory**: Multiple constituents with individual kinetics and mechanics
-- **Multi-fiber families**: Support for oriented fiber families (e.g., circumferential, axial, diagonal collagen)
-- **Flexible kinetics**: Stimulus-driven production and degradation rates
-- **Multiple integration methods**: Simpson's rule and trapezoidal integration
-- **Optimized survival computation**: O(n) backward iteration algorithm for efficient heredity integrals
-- **Modular architecture**: Clean separation between kinematics, mechanics, and kinetics
+## Background
+svGrowth is based on the constrained mixture theory developed by Humphrey & Rajagopal (2002), where tissues adapt to mechanobiological stimuli through continuous turnover of their structurally-significant constituents:
 
+> **Humphrey, J. D., & Rajagopal, K. R. (2002)**  
+> *A constrained mixture model for growth and remodeling of soft tissues*  
+> **Mathematical Models and Methods in Applied Sciences**, 12(03), 407-430.  
+> DOI: [10.1142/S0218202502001714](https://doi.org/10.1142/S0218202502001714)
 
-### Code architecture
+## Key Features
 
-<p align="center">
-  <img src="docs/svGrowth_architecture.png">
-</p>
+✅ **Scalable Multi-Layer Architecture**  
+Single-layer to multi-layer geometries with unlimited constituents per layer, including multi-fiber families with distinct fiber orientations.
 
+✅ **Geometry-Agnostic Framework (in dev)**  
+Built-in support for axisymmetric shapes (cylinders, spheres, ellipsoids) with thin/thick wall assumptions. Designed for future integration with arbitrary 3D geometries and finite element coupling.
+
+✅ **Extensive Constitutive Library**  
+Pre-built models for constituent mechanics (neo-Hookean, Fung exponential) and turnover kinetics (stress-mediated, shear-mediated, inflammation-mediated), with flexible support for user-defined models.
+
+✅ **End-to-End Simulation Pipeline (in dev)**  
+Complete workflow from experimental data and G&R parameter fitting to post-processing analysis and figures.
+
+✅ **Comprehensive Testing Framework**    
+Dedicated unit, integration, and end-to-end testing framework to validate individual components, coupled subsystems, and full pipeline behavior. Continuous integration ensures cross-platform reproducibility.
+
+✅ **Developer-Friendly**  
+Designed for researchers interested in extending the framework. Modular architecture with small, readable functions and integrated testing/profiling tools promote long-term, sustainable development.
 
 ## Installation
 
+### Prerequisites
+
+- **Python 3.9+**
+### Install from Source
+
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/svGrowth.git
-cd svGrowth
+git clone https://github.com/StanfordCBCL/svGrowth.git
 
 # Install dependencies
+cd svGrowth
 pip install -r requirements.txt
-```
 
-**Requirements:**
-- Python 3.9+
-- NumPy
-- PyYAML
+# For developers
+pip install -r requirements-dev.txt
+```
 
 ## Quick Start
 
+### Running Your First Simulation
+
+All you need to launch a G&R simulation is a YAML parameter file. Documentation for available configuration options is currently under development.
+
+An example parameter file is provided in [`examples/latorre2018.yaml`](examples/latorre2018.yaml), which reproduces the cerebral artery model from:
+
+> **Latorre, M., & Humphrey, J. D. (2018)**  
+> *A mechanobiologically equilibrated constrained mixture model for growth and remodeling of soft tissues*  
+> **ZAMM-Journal of Applied Mathematics and Mechanics**, 98, 2048–2071.  
+> DOI: [10.1002/zamm.201700302](https://doi.org/10.1002/zamm.201700302)
+
+### Run the Example
+
 ```bash
-# Run example simulation (Latorre et al. 2018 cerebral artery model)
-python main.py
+cd svGrowth/src
+
+# Run simulation with example parameter file
+python main.py --input ../examples/latorre2018.yaml --output ../sim_results
 ```
 
-This will:
-1. Load parameters from latorre2018_updated.yaml
-2. Initialize a single-layer cerebral artery model
-3. Simulate 700 days of G&R
-4. Save results to `outputdir/`
+## Documentation
 
-## Project Structure
+| Resource | Description | Status |
+|----------|-------------|--------|
+| **[Architecture Breakdown](documentation/architecture_breakdown.ipynb)** | Introductory guide to svGrowth architecture and data flow | ✅ Available |
+| **[API Reference](documentation/)** | Class-level function summaries | 🚧 Partial |
+| **User Guide** | Tutorials and examples | 📋 Planned |
+| **Theory Guide** | Mathematical background | 📋 Planned |
 
-```
-svGrowth/
-├── main.py                      # Entry point
-├── simulation.py                # Main simulation loop
-├── configuration.py             # Multi-layer vessel configuration
-├── layer.py                     # Single layer (e.g., media, adventitia)
-├── constituent.py               # Constituent classes (single/multi-fiber)
-├── kinetics.py                  # Production, degradation, survival
-├── kinetics_interface.py        # Data access adapter for kinetics
-├── mechanics.py                 # Stress computations
-├── mechanics_interface.py       # Data access adapter for mechanics
-├── deformation_kinematics.py    # Thin-wall/thick-wall kinematics
-├── constitutive_laws.py         # Constitutive models (Neo-Hookean, Fung)
-├── integrators.py               # Numerical integration (Simpson, trapezoidal)
-├── tensor_operations.py         # Tensor algebra utilities
-├── io_handler.py                # YAML I/O
-└── latorre2018_updated.yaml     # Example parameter file
-```
-
-## Usage
-
-### 1. Define Your Model (YAML)
-
-```yaml
-layers:
-  - layer_name: "media"
-    rhoR_h: 1050.0  # Reference density (kg/m³)
-    
-    geometry:
-      type: "thin_wall_cylinder"
-      a_h: 1.40   # Inner radius (mm)
-      h_h: 0.12   # Thickness (mm)
-      lambda_z_h: 1.0
-    
-    loading_variables:
-      P_h: 14.18  # Pressure (kPa)
-      Q_h: 1.0    # Flow rate (m³/day)
-    
-    constituents:
-      elastin:
-        mass_fraction: 0.02
-        constitutive_model:
-          type: "neo_hookean"
-          parameters:
-            c: 70.6  # kPa
-      
-      collagen:
-        constituent_type: "multi_fiber_family"
-        shared_properties:
-          total_mass_fraction: 0.22
-          kinetics:
-            degradation:
-              deg_rate:
-                type: "quadratic"
-                k_alpha_h: 0.1  # 1/day
-                gain_params:
-                  intramural_stress: 1.0
-            production:
-              stimulus_function_form: "linear"
-              gain_params:
-                intramural_stress: 1.0
-        
-        fiber_families:
-          circumferential:
-            mass_fraction_ratio: 0.6
-            constitutive_model:
-              type: "fung_exponential"
-              parameters:
-                c1: 672.5
-                c2: 22.0
-```
-
-### 2. Run Simulation
-
-```python
-from io_handler import IOHandler
-from configuration import Configuration
-from simulation import Simulation
-
-# Load parameters
-io_handler = IOHandler()
-params = io_handler.load_parameters("your_model.yaml")
-
-# Create configuration
-config = Configuration.from_parameters(params)
-
-# Run simulation
-sim = Simulation(
-    configuration=config,
-    dt=1.0,              # Time step (days)
-    n_steps=700,         # Number of steps
-    integration_method='simpson',
-    survival_function_computation='backward'
-)
-sim.run()
-```
-
-## Theory
-
-### Constrained Mixture Model
-
-The framework implements:
-
-1. **Mass balance** (referential mass density):
-   ```
-   ρᴿ_α(s) = ∫[τ_min to s] mᴿ_α(τ) q(s,τ) dτ
-   ```
-
-2. **Stress balance** (Cauchy stress):
-   ```
-   σ = Σ_α ∫[τ_min to s] (mᴿ_α(τ) q(s,τ)/ρᴿ_h) σ̂_α(s,τ) dτ - λI
-   ```
-
-3. **Survival function** (exponential decay):
-   ```
-   q(s,τ) = exp(-∫[τ to s] k_α(t) dt)
-   ```
-
-Where:
-- `s` = current time, `τ` = deposition time
-- `mᴿ_α` = production rate (kg/(m³·day))
-- `k_α` = degradation rate (1/day)
-- `q(s,τ)` = survival fraction
-- `σ̂_α` = constituent stress
-- `λ` = Lagrange multiplier (enforces σᵣ = 0)
-
-### Kinematics
-
-**Thin-wall cylindrical** (current implementation):
-```
-F = diag(λᵣ, λ_θ, λ_z)
-λ_θ = r_mid / R_mid
-λ_z = prescribed
-λᵣ = 1/(λ_θ λ_z)  (incompressibility)
-```
-
-## Architecture Highlights
-
-### 1. **Separation of Concerns**
-- **Kinematics**: Geometry → deformation gradient F
-- **Mechanics**: F → stress σ (constitutive models)
-- **Kinetics**: Stimuli → production/degradation rates
-
-### 2. **Adapter Pattern**
-- `KineticsContext`: Decouples kinetics from data structure
-- `MechanicsContext`: Decouples mechanics from data structure
-
-### 3. **Factory Pattern**
-- `IntegratorFactory`: Create integrators by name
-- `KinematicsFactory`: Create kinematics by geometry type
-- `ConstitutiveModel.from_parameters()`: Parse YAML to models
-
-### 4. **Strategy Pattern**
-- `SurvivalFunctionComputation`: Pluggable survival algorithms (naive O(n²) vs backward O(n))
-
-## Examples
-
-See latorre2018_updated.yaml for a complete cerebral artery model from:
-
-> Latorre, M., & Humphrey, J. D. (2018). Modeling mechano-driven and immuno-mediated aortic maladaptation in hypertension. *Biomechanics and Modeling in Mechanobiology*, 17(5), 1497-1511.
 
 ## Contributing
 
-Contributions are welcome! Key areas for extension:
+Contributions are welcome! We are currently finalizing contribution guidelines. In the meantime:
 
-- [ ] Thick-wall kinematics (including spherical geometries)
-- [ ] Active smooth muscle contraction
-- [ ] Multi-layer contact constraints
-- [ ] Residual stress computation
-- [ ] Finite element integration
+### Request features or report bugs
 
-## License
-
-MIT License - see LICENSE file
+1. **Search existing issues** — Your problem may already be documented.
+2. **Open a new issue** — Use the issue templates for "Feature request" or "Bug report". See previous issues for styling and format.
 
 ## Citation
 
 If you use svGrowth in your research, please cite:
 
 ```bibtex
-@software{TBD,
-  author = {Your Name},
-  title = {svGrowth: A Python Framework for Growth and Remodeling},
+@software{svGrowth,
+  author = {TBD},
+  title = {TBD},
   year = {TBD},
 }
 ```
-
-## References
-
-1. Humphrey, J. D., & Rajagopal, K. R. (2002). A constrained mixture model for growth and remodeling of soft tissues. *Mathematical Models and Methods in Applied Sciences*, 12(03), 407-430.
-
-2. Baek, S., Rajagopal, K. R., & Humphrey, J. D. (2006). A theoretical model of enlarging intracranial fusiform aneurysms. *Journal of Biomechanical Engineering*, 128(1), 142-149.
-
-3. Latorre, M., & Humphrey, J. D. (2018). Modeling mechano-driven and immuno-mediated aortic maladaptation in hypertension. *Biomechanics and Modeling in Mechanobiology*, 17(5), 1497-1511.
-
-## Contact
-
-For questions or issues, please open an issue on GitHub or contact [lazaros@stanford.edu](mailto:lazaros@stanford.edu).
-
----
-
-**Status**: Early development - API subject to change
