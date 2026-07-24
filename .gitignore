@@ -1,4 +1,6 @@
 RawOutputs/
+Preprocessing/
+sim_outputs/
 .DS_Store
 .vscode/settings.json
 *.o
@@ -47,3 +49,7 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+tests/unit/test_preprocessing_pipeline.py
+docs/preprocessing_pipeline_implementation_d2409c7a.plan.md
+.cursor/plans/preprocessing_pipeline_implementation_d2409c7a.plan.md
+src/wcb.yaml
